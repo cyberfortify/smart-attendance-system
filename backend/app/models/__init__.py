@@ -1,0 +1,7 @@
+# This file ensures 'app.models' is a package and imports model classes for convenience.
+from .user import User  # noqa: F401
+from .classes import Class  # noqa: F401
+from .student import Student  # noqa: F401
+from .teacher import Teacher  # noqa: F401
+from .attendance_session import AttendanceSession  # noqa: F401
+from .attendance_record import AttendanceRecord  # noqa: F401
