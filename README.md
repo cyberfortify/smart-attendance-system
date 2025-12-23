@@ -19,6 +19,6 @@ Full-stack attendance system built with:
 
 
 ### Account to login:
-admin: admin@example.com pass: admin123
-teacher: teacher1@gmail.com pass: teacher123
-student:  
+- admin: admin@example.com pass: admin123
+- teacher: teacher1@gmail.com pass: teacher123
+- student: tejas@gmail.com pass: student123  
