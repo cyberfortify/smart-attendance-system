@@ -540,7 +540,8 @@ export default function ManageTeachers() {
           <div className={`${glassCard} p-4`}>
             <h3 className="font-semibold text-base text-slate-900 mb-3">Quick Actions</h3>
             <div className="space-y-2.5">
-              <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+              {/* onClick={() => fileInputRef.current?.click()} */}
+              <button  className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-blue-50 rounded-lg border border-blue-100"><Upload className="w-4 h-4 text-blue-600" /></div>
                 <div>
                   <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
@@ -548,7 +549,9 @@ export default function ManageTeachers() {
                 </div>
               </button>
 
-              <button onClick={exportCSV} className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+
+              {/* onClick={exportCSV} */}
+              <button  className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-green-50 rounded-lg border border-green-100"><Download className="w-4 h-4 text-green-600" /></div>
                 <div>
                   <div className="font-medium text-slate-900 text-sm">Export Teachers</div>

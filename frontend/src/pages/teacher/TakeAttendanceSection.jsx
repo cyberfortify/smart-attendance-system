@@ -5,7 +5,7 @@ import AttendanceTable from "../../components/AttendanceTable";
 // import ConfirmModal from "../../components/ConfirmModal";
 import Toast from "../../components/Toast";
 
-export default function TakeAttendanceSection({ onDone, glassCard }) {
+export default function TakeAttendanceSection({ onDone, glassCard, showToast }) {
   const [students, setStudents] = useState([]);
   const [values, setValues] = useState({});
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -13,7 +13,6 @@ export default function TakeAttendanceSection({ onDone, glassCard }) {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [toast, setToast] = useState(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
   // 1️⃣ Load teacher classes
@@ -131,19 +130,17 @@ export default function TakeAttendanceSection({ onDone, glassCard }) {
       // 3️⃣ Save attendance records
       await api.put(`/teacher/sessions/${sessionId}/records`, records);
 
-      setToast({
-        message: "Attendance saved successfully",
-        variant: "success",
-      });
-
+      showToast("Attendance saved successfully", "success");
       setTimeout(() => {
         onDone && onDone();
-      }, 1200);
+      }, 600);
+
     } catch (err) {
-      setToast({
-        message: err.response?.data?.error || "Failed to save attendance",
-        variant: "error",
-      });
+      showToast(
+        err.response?.data?.error || "Failed to save attendance",
+        "error"
+      );
+
     } finally {
       setLoading(false);
     }
@@ -266,14 +263,6 @@ export default function TakeAttendanceSection({ onDone, glassCard }) {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
       /> */}
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          variant={toast.variant}
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }

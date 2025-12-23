@@ -10,7 +10,7 @@ export default function Login() {
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("admin123");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  // const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -21,11 +21,11 @@ export default function Login() {
     setError("");
     setIsLoading(true);
 
-    if (rememberMe) {
-      localStorage.setItem("remember_email", email);
-    } else {
-      localStorage.removeItem("remember_email");
-    }
+    // if (rememberMe) {
+    //   localStorage.setItem("remember_email", email);
+    // } else {
+    //   localStorage.removeItem("remember_email");
+    // }
 
 
     try {
@@ -54,13 +54,13 @@ export default function Login() {
     }
   }
 
-  useEffect(() => {
-    const savedEmail = localStorage.getItem("remember_email");
-    if (savedEmail) {
-      setEmail(savedEmail);
-      setRememberMe(true);
-    }
-  }, []);
+  // useEffect(() => {
+  //   const savedEmail = localStorage.getItem("remember_email");
+  //   if (savedEmail) {
+  //     setEmail(savedEmail);
+  //     setRememberMe(true);
+  //   }
+  // }, []);
 
 
   function handleClose() {
@@ -178,7 +178,7 @@ export default function Login() {
 
                 {/* Options - Compact */}
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-1.5 text-xs">
+                  {/* <label className="flex items-center gap-1.5 text-xs">
                     <input
                       type="checkbox"
                       checked={rememberMe}
@@ -187,10 +187,10 @@ export default function Login() {
                     />
 
                     <span>Remember</span>
-                  </label>
-                  <button type="button" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                  </label> */}
+                  {/* <button type="button" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
                     Forgot?
-                  </button>
+                  </button> */}
                 </div>
 
                 {/* Submit Button - Compact */}

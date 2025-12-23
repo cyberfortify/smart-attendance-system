@@ -179,9 +179,141 @@ export default function ManageClasses() {
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Class List */}
+        <div className="lg:col-span-2 order-2 lg:order-1">
+          <div className={`${glassCard} overflow-auto h-[60vh] md:h-[calc(100vh-150px)]`}>
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Class List</h2>
+                  <p className="text-slate-600 text-sm mt-1">Manage all classes in your institution</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search classes..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-full sm:w-64"
+                    />
+                  </div>
+
+                  {/* Filter */}
+                  <div className="relative">
+                    <div className="flex items-center gap-2 border border-gray-300 rounded-xl px-4 py-2 cursor-pointer hover:border-gray-400 transition-colors">
+                      <Filter className="w-5 h-5 text-gray-400" />
+                      <select
+                        value={filterYear}
+                        onChange={e => setFilterYear(e.target.value)}
+                        className="appearance-none bg-transparent outline-none cursor-pointer"
+                      >
+                        <option value="all">All Years</option>
+                        {uniqueYears.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className=" overflow-x-auto">
+              {filteredClasses.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left p-4 font-semibold">Class</th>
+                      <th className="text-left p-4 font-semibold">Section</th>
+                      <th className="text-left p-4 font-semibold">Year</th>
+                      <th className="text-left p-4 font-semibold">Status</th>
+                      <th className="text-left p-4 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredClasses.map(cls => (
+                      <tr
+                        key={cls.id}
+                        className="border-b hover:bg-gray-50 transition"
+                      >
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                              <BookOpen className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{cls.name}</p>
+                              <p className="text-xs text-gray-500">ID: {cls.id}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-4">{cls.section}</td>
+
+                        <td className="p-4">{cls.year}</td>
+
+                        <td className="p-4">
+                          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">
+                            Active
+                          </span>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            <button className="p-2 hover:bg-blue-50 rounded-lg">
+                              <Edit2 className="w-4 h-4 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => setShowDeleteConfirm(cls.id)}
+                              className="p-2 hover:bg-red-50 rounded-lg"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-12 text-center">
+                  <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No classes found</h3>
+                  <p className="text-gray-600 mb-4">
+                    {searchTerm || filterYear !== "all"
+                      ? "Try adjusting your search or filter"
+                      : "Create your first class using the form above"
+                    }
+                  </p>
+                  {(searchTerm || filterYear !== "all") && (
+                    <button
+                      onClick={() => {
+                        setSearchTerm("");
+                        setFilterYear("all");
+                      }}
+                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      <X className="w-4 h-4" />
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Create Class Form */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-1 order-1 lg:order-2">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -239,23 +371,24 @@ export default function ManageClasses() {
                 <button
                   onClick={handleCreate}
                   disabled={isSubmitting || !form.name || !form.section || !form.year}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${isSubmitting || !form.name || !form.section || !form.year
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                  className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium transition-all ${isSubmitting || !form.name || !form.section || !form.year
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow hover:shadow-md"
                     }`}
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       Creating...
                     </>
                   ) : (
                     <>
-                      <PlusCircle className="w-5 h-5" />
-                      Create Class
+                      <PlusCircle className="w-4 h-4" />
+                      Create
                     </>
                   )}
                 </button>
+
               </div>
             </div>
           </div>
@@ -296,134 +429,8 @@ export default function ManageClasses() {
         </div> */}
       </div>
 
-      {/* Class List */}
-      <div className={`${glassCard} overflow-auto h-[60vh] md:h-[calc(100vh-150px)]`}>
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Class List</h2>
-              <p className="text-slate-600 text-sm mt-1">Manage all classes in your institution</p>
-            </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search classes..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-full sm:w-64"
-                />
-              </div>
 
-              {/* Filter */}
-              <div className="relative">
-                <div className="flex items-center gap-2 border border-gray-300 rounded-xl px-4 py-2 cursor-pointer hover:border-gray-400 transition-colors">
-                  <Filter className="w-5 h-5 text-gray-400" />
-                  <select
-                    value={filterYear}
-                    onChange={e => setFilterYear(e.target.value)}
-                    className="appearance-none bg-transparent outline-none cursor-pointer"
-                  >
-                    <option value="all">All Years</option>
-                    {uniqueYears.map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className=" overflow-x-auto">
-          {filteredClasses.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left p-4 font-semibold">Class</th>
-                  <th className="text-left p-4 font-semibold">Section</th>
-                  <th className="text-left p-4 font-semibold">Year</th>
-                  <th className="text-left p-4 font-semibold">Status</th>
-                  <th className="text-left p-4 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredClasses.map(cls => (
-                  <tr
-                    key={cls.id}
-                    className="border-b hover:bg-gray-50 transition"
-                  >
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                          <BookOpen className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{cls.name}</p>
-                          <p className="text-xs text-gray-500">ID: {cls.id}</p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="p-4">{cls.section}</td>
-
-                    <td className="p-4">{cls.year}</td>
-
-                    <td className="p-4">
-                      <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">
-                        Active
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <div className="flex gap-2">
-                        <button className="p-2 hover:bg-blue-50 rounded-lg">
-                          <Edit2 className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteConfirm(cls.id)}
-                          className="p-2 hover:bg-red-50 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <AlertCircle className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No classes found</h3>
-              <p className="text-gray-600 mb-4">
-                {searchTerm || filterYear !== "all"
-                  ? "Try adjusting your search or filter"
-                  : "Create your first class using the form above"
-                }
-              </p>
-              {(searchTerm || filterYear !== "all") && (
-                <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setFilterYear("all");
-                  }}
-                  className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  <X className="w-4 h-4" />
-                  Clear filters
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (

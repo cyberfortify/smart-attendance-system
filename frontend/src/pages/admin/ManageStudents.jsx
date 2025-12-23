@@ -62,15 +62,15 @@ export default function ManageStudents({ onStudentChanged }) {
           q: search,
           page,
           per_page: perPage,
-          class_id: selectedClassId || undefined,   // 👈 नया
+          class_id: selectedClassId || undefined,  
         },
       });
 
       setStudents(res.data.data || []);
-      setTotalCount(res.data.total || 0);
-      setActiveCount(res.data.active_count || 0);
-      setWithClassCount(res.data.with_class_count || 0);
-      setNewThisMonthCount(res.data.new_this_month_count || 0);
+      setTotalCount(res.data.total ?? res.data.total ?? 0);
+      setActiveCount(res.data.active_count ?? res.data.total ?? 0);
+      setWithClassCount(res.data.with_class_count ?? res.data.total ?? 0);
+      setNewThisMonthCount(res.data.new_this_month_count ?? res.data.total ?? 0);
     } catch (err) {
       console.error(err);
       setToast({ message: "Failed to load students", variant: "error" });

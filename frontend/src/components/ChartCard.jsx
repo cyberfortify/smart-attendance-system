@@ -34,15 +34,18 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         data,
         backgroundColor:
           type === "pie"
-            ? ["#10b981", "#ef4444", "#3b82f6", "#f59e0b"] // ✅ Better colors
-            : "rgba(99,102,241,0.6)", // ✅ Slightly more opaque
+            ? ["#10b981", "#ef4444", "#3b82f6", "#f59e0b"] // Better colors
+            : "rgba(99,102,241,0.6)", // Slightly more opaque
         borderColor:
           type === "pie"
-            ? ["#059669", "#dc2626", "#2563eb", "#d97706"] // ✅ Matching borders
+            ? ["#059669", "#dc2626", "#2563eb", "#d97706"] // Matching borders
             : "rgba(99,102,241,1)",
-        borderWidth: type === "pie" ? 3 : 2, // ✅ Pie thicker border
-        tension: type === "line" ? 0.4 : 0, // ✅ Fix for bar/pie
-        fill: type === "line" ? true : false, // ✅ Line fill only
+        borderWidth: type === "pie" ? 3 : 2, // Pie thicker border
+        tension: type === "line" ? 0.4 : 0, //  Fix for bar/pie
+        fill: type === "line" ? true : false, //  Line fill only
+        clip: false,               
+        pointRadius: type === "line" ? 3 : 0,
+        pointHoverRadius: type === "line" ? 5 : 0,
       },
     ],
   };
@@ -50,13 +53,22 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 16,     // 🔥 THIS FIXES THE CUT
+        right: 8,
+        left: 8,
+        bottom: 8
+      }``
+    },
+
     plugins: {
       legend: {
         display: type === "pie",
-        position: "bottom", // ✅ Legend bottom for pie
+        position: "bottom", // Legend bottom for pie
         labels: {
           padding: 20,
-          usePointStyle: true, // ✅ Circle legend dots
+          usePointStyle: true, // Circle legend dots
           font: { size: 12 }
         }
       },
@@ -67,11 +79,19 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          label: (context) => `${context.parsed}%` // ✅ Clean tooltip
+          label: (context) => {
+            const value =
+              typeof context.parsed === "number"
+                ? context.parsed
+                : context.parsed?.y;
+
+            return value !== undefined ? `${value}%` : "";
+          }
         }
       }
+
     },
-    scales: type !== "pie" && { // ✅ Only for line/bar
+    scales: type !== "pie" && { // Only for line/bar
       x: {
         grid: { color: "rgba(0,0,0,0.05)" },
         ticks: { color: "rgba(100,116,139,0.6)" }
@@ -86,7 +106,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
       }
     },
     elements: {
-      bar: { borderRadius: 4 } // ✅ Rounded bars
+      bar: { borderRadius: 4 } //  Rounded bars
     }
   };
 
@@ -95,7 +115,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
       className="w-full h-full bg-white/80 backdrop-blur-sm border border-slate-100/50 rounded-xl p-3 shadow-sm"
       style={{ height }}
     >
-      <div className="w-full h-full" style={{ height: `calc(100% - 0.5rem)` }}>
+      <div className="w-full h-full" >
         {type === "line" && <Line data={chartData} options={options} />}
         {type === "bar" && <Bar data={chartData} options={options} />}
         {type === "pie" && <Pie data={chartData} options={options} />}

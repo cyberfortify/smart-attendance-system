@@ -30,6 +30,7 @@ export default function TeacherDashboard() {
   const [defaulters, setDefaulters] = useState([]);
   const [defaulterClassId, setDefaulterClassId] = useState("");
   const [defaulterLoading, setDefaulterLoading] = useState(false);
+  const refreshDashboard = () => loadDashboard();
 
   const glassCard =
     "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
@@ -105,10 +106,10 @@ export default function TeacherDashboard() {
           });
         } catch (summaryErr) {
           console.warn("Summary API unavailable");
-          // ✅ No fallback - 0 values
+          // No fallback - 0 values
         }
 
-        // ✅ 3. Defaulters (API only - tumhara route)
+        //  3. Defaulters (API only - tumhara route)
         if (classes.length > 0) {
           try {
             const defaulterRes = await api.get("/reports/defaulters", {
@@ -120,7 +121,7 @@ export default function TeacherDashboard() {
             setDefaulters(defaulterRes.data?.data || []);
           } catch (defErr) {
             console.warn("Defaulters API unavailable:", defErr.response?.status);
-            setDefaulters([]);  // ✅ Empty array only
+            setDefaulters([]);  // Empty array only
           }
         }
 
@@ -312,7 +313,7 @@ export default function TeacherDashboard() {
                         data={[presentPercent, absentPercent]}
                         height={180}
                       />
-                      {/* <div className="space-y-3">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50">
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full bg-emerald-500" />
@@ -342,7 +343,7 @@ export default function TeacherDashboard() {
                         <div className="text-[11px] text-slate-500">
                           Total records: {summary.presentCount + summary.absentCount}
                         </div>
-                      </div> */}
+                      </div>
                     </div>
                   </div>
 
@@ -406,7 +407,11 @@ export default function TeacherDashboard() {
               <TakeAttendanceSection
                 glassCard={glassCard}
                 onDone={() => setActiveTab("dashboard")}
+                showToast={(msg, variant = "success") =>
+                  setToast({ message: msg, variant })
+                }
               />
+
             )}
             {activeTab === "students" && (
               <div className={glassCard + " p-4"}>
@@ -588,8 +593,8 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
           <button
             onClick={() => setActiveReportTab("daily")}
             className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium ${activeReportTab === "daily"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-600 hover:text-slate-900"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900"
               }`}
           >
             Daily
@@ -597,8 +602,8 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
           <button
             onClick={() => setActiveReportTab("monthly")}
             className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium ${activeReportTab === "monthly"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-600 hover:text-slate-900"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900"
               }`}
           >
             Monthly
@@ -681,7 +686,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
         </div>
 
         {/* Chart */}
-        <div className="relative h-64 sm:h-72 lg:h-80">
+        <div className="relative h-[320px] sm:h-[360px] lg:h-[420px] flex items-center">
           {activeReportTab === "daily" && (
             dailyData && dailyData.length > 0 ? (
               <ChartCard
@@ -689,6 +694,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
                 title=""
                 labels={dailyLabels}
                 data={dailyValues}
+                height={360}
               />
             ) : (
               <p className="text-sm text-slate-500">No daily data.</p>
@@ -702,6 +708,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
                 title=""
                 labels={monthlyLabels}
                 data={monthlyValues}
+                height={360}
               />
             ) : (
               <p className="text-sm text-slate-500">No monthly data.</p>

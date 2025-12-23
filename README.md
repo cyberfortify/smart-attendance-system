@@ -16,3 +16,9 @@ Full-stack attendance system built with:
 ### Backend
  waitress-serve --listen=0.0.0.0:5000 run:app
 
+
+
+### Account to login:
+admin: admin@example.com pass: admin123
+teacher: teacher1@gmail.com pass: teacher123
+student:  

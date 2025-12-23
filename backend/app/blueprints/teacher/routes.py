@@ -39,18 +39,9 @@ def _get_current_teacher():
         raise APIError("Teacher profile not found", status_code=404)
     return teacher
 
-
 @teacher_bp.route("/dashboard", methods=["GET"])
 @role_required("TEACHER")
 def teacher_dashboard():
-    """
-    Summary stats for teacher dashboard.
-    Returns:
-      total_students: unique students across teacher's assigned classes
-      today_attendance_rate: % of PRESENT records for today's sessions
-      pending_tasks: placeholder = 0
-      upcoming_classes: placeholder = 0
-    """
     teacher = _get_current_teacher()
 
     # 1) Teacher ke assigned classes
@@ -60,8 +51,7 @@ def teacher_dashboard():
         .scalar_subquery()
     )
 
-
-    # 2) Total unique students in those classes
+    # 2) Total unique students
     total_students = (
         db.session.query(func.count(func.distinct(Student.id)))
         .filter(Student.class_id.in_(teacher_class_ids))
@@ -69,57 +59,49 @@ def teacher_dashboard():
         or 0
     )
 
-    # 3) Today's attendance rate (sirf teacher ke sessions)
-    today = date.today()
+    # 3) Latest attendance session (🔥 FIX)
+    latest_session = (
+        db.session.query(AttendanceSession)
+        .filter(AttendanceSession.teacher_id == teacher.id)
+        .order_by(AttendanceSession.session_date.desc())
+        .first()
+    )
 
-    today_sessions = (
-        db.session.query(AttendanceSession.id)
-        .filter(
-            AttendanceSession.teacher_id == teacher.id,
-            AttendanceSession.session_date == today,
+    if latest_session:
+        total_records = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .filter(AttendanceRecord.session_id == latest_session.id)
+            .scalar()
+            or 0
         )
-        .subquery()
-    )
 
-    total_records = (
-        db.session.query(func.count(AttendanceRecord.id))
-        .filter(AttendanceRecord.session_id.in_(today_sessions))
-        .scalar()
-        or 0
-    )
-
-    present_records = (
-        db.session.query(func.count(AttendanceRecord.id))
-        .filter(
-            AttendanceRecord.session_id.in_(today_sessions),
-            AttendanceRecord.status == "PRESENT",
+        present_records = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .filter(
+                AttendanceRecord.session_id == latest_session.id,
+                AttendanceRecord.status == "PRESENT",
+            )
+            .scalar()
+            or 0
         )
-        .scalar()
-        or 0
-    )
 
-    if total_records > 0:
-        today_attendance_rate = round(present_records * 100 / total_records)
+        today_attendance_rate = (
+            round((present_records * 100) / total_records)
+            if total_records > 0 else 0
+        )
     else:
         today_attendance_rate = 0
 
-    pending_tasks = 0
-    upcoming_classes = 0
+    return jsonify({
+        "success": True,
+        "data": {
+            "total_students": total_students,
+            "today_attendance_rate": today_attendance_rate,
+            "pending_tasks": 0,
+            "upcoming_classes": 0,
+        }
+    }), 200
 
-    return (
-        jsonify(
-            {
-                "success": True,
-                "data": {
-                    "total_students": total_students,
-                    "today_attendance_rate": today_attendance_rate,
-                    "pending_tasks": pending_tasks,
-                    "upcoming_classes": upcoming_classes,
-                },
-            }
-        ),
-        200,
-    )
 
 @teacher_bp.route("/classes", methods=["GET"])
 @role_required("TEACHER")
