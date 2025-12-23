@@ -14,4 +14,5 @@ Full-stack attendance system built with:
 ## Local setup
 
 ### Backend
+ waitress-serve --listen=0.0.0.0:5000 run:app
 
