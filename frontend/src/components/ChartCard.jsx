@@ -59,7 +59,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         right: 8,
         left: 8,
         bottom: 8
-      }``
+      }
     },
 
     plugins: {

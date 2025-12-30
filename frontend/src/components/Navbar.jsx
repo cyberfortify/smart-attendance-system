@@ -1,83 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getUser } from "../utils/auth";
 import {
-  UserIcon,
-  ChevronDownIcon,
   GraduationCap,
   Menu
 } from "lucide-react";
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const user = getUser();
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const dropdownRef = useRef(null); // अब नहीं भी चाहिए, चाहो तो हटा सकते हो
 
   const navLinks = [
-    { name: 'Home', path: '/' },
-    { name: 'Features', path: '/' },
-    { name: 'About', path: '/about' },
-    { name: 'Contact', path: '/contact' }
+    { name: "Home", path: "/" },
+    { name: "Features", path: "/" },
+    { name: "About", path: "/about" },
+    { name: "Contact", path: "/contact" },
   ];
-
-  // 1. DESKTOP NAVIGATION (setIsMobileMenuOpen नहीं है यहाँ)
-  {
-    navLinks.map((link) => (
-      <button
-        key={link.name}
-        onClick={() => {
-          if (link.name === 'Features') {
-            const element = document.getElementById('features');
-            if (element) {
-              element.scrollIntoView({ behavior: 'smooth' });
-            }
-          } else {
-            navigate(link.path);
-          }
-        }}
-        className="px-3 py-2 text-gray-700 hover:text-indigo-600 font-medium text-sm rounded-lg hover:bg-indigo-50 transition-all duration-200"
-      >
-        {link.name}
-      </button>
-    ))
-  }
-
-  // 2. MOBILE NAVIGATION (यहाँ setIsMobileMenuOpen है)
-  {
-    navLinks.map((link) => (
-      <button
-        key={link.name}
-        onClick={() => {
-          setIsMobileMenuOpen(false);  // Mobile menu बंद करें
-          if (link.name === 'Features') {
-            const element = document.getElementById('features');
-            if (element) {
-              element.scrollIntoView({ behavior: 'smooth' });
-            }
-          } else {
-            navigate(link.path);
-          }
-        }}
-        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg font-medium"
-      >
-        {link.name}
-      </button>
-    ))
-  }
-
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-200">
@@ -96,19 +34,20 @@ export default function Navbar() {
             </span>
           </div>
 
-          {/* Desktop Navigation & Auth */}
+          {/* Desktop Navigation + Login */}
           <div className="hidden md:flex items-center gap-8">
             {/* Navigation Links */}
             <div className="flex items-center gap-2">
-              {navLinks.map((link, index) => (
-                index === 1 ? (  // Features link (index 1)
+              {navLinks.map((link, index) =>
+                index === 1 ? (
+                  // Features link
                   <button
                     key={link.name}
                     onClick={() => {
-                      if (link.path === '/') {
-                        document.getElementById('features')?.scrollIntoView({
-                          behavior: 'smooth'
-                        });
+                      if (link.path === "/") {
+                        document
+                          .getElementById("features")
+                          ?.scrollIntoView({ behavior: "smooth" });
                       } else {
                         navigate(link.path);
                       }
@@ -126,65 +65,16 @@ export default function Navbar() {
                     {link.name}
                   </button>
                 )
-              ))}
-            </div>
-
-
-            {/* User Menu */}
-            <div className="flex items-center gap-4 ml-4">
-              {user ? (
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                      <UserIcon className="w-5 h-5" />
-                    </div>
-                    <span className="font-medium text-gray-700 hidden lg:block">
-                      {user.name?.split(" ")[0] || "User"}
-                    </span>
-                    <ChevronDownIcon className="w-4 h-4 text-gray-500" />
-                  </button>
-
-                  {isDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="font-semibold text-gray-900">{user.name}</p>
-                        <p className="text-sm text-gray-500 truncate">{user.email}</p>
-                      </div>
-                      <div className="py-2">
-                        <button
-                          onClick={() => {
-                            navigate("/dashboard");
-                            setIsDropdownOpen(false);
-                          }}
-                          className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50"
-                        >
-                          Dashboard
-                        </button>
-                        <button
-                          onClick={() => {
-                            navigate("/profile");
-                            setIsDropdownOpen(false);
-                          }}
-                          className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50"
-                        >
-                          Profile Settings
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => navigate("/login")}
-                  className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm hover:shadow"
-                >
-                  Login
-                </button>
               )}
             </div>
+
+            {/* Always show Login button */}
+            <button
+              onClick={() => navigate("/login")}
+              className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm hover:shadow"
+            >
+              Login
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -202,18 +92,17 @@ export default function Navbar() {
         {isMobileMenuOpen && (
           <div className="md:hidden pb-4 border-t border-gray-200">
             {/* Mobile Navigation Links */}
-            {/* Mobile Navigation Links */}
             <div className="pt-4 pb-4 space-y-2">
-              {navLinks.map((link, index) => (
-                index === 1 ? (  // Features link
+              {navLinks.map((link, index) =>
+                index === 1 ? (
                   <button
                     key={link.name}
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      if (link.path === '/') {
-                        document.getElementById('features')?.scrollIntoView({
-                          behavior: 'smooth'
-                        });
+                      if (link.path === "/") {
+                        document
+                          .getElementById("features")
+                          ?.scrollIntoView({ behavior: "smooth" });
                       } else {
                         navigate(link.path);
                       }
@@ -234,45 +123,21 @@ export default function Navbar() {
                     {link.name}
                   </button>
                 )
-              ))}
+              )}
             </div>
 
-
-            {/* Mobile User Menu */}
-            {user ? (
-              <div className="pt-2 space-y-2 border-t border-gray-100" ref={dropdownRef}>
-                <button
-                  onClick={() => {
-                    navigate("/dashboard");
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg"
-                >
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    navigate("/profile");
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg"
-                >
-                  Profile Settings
-                </button>
-              </div>
-            ) : (
-              <div className="pt-4">
-                <button
-                  onClick={() => {
-                    navigate("/login");
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm hover:shadow text-left"
-                >
-                  Login
-                </button>
-              </div>
-            )}
+            {/* Mobile Login button (always visible) */}
+            <div className="pt-4 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  navigate("/login");
+                }}
+                className="w-full px-4 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm hover:shadow text-left"
+              >
+                Login
+              </button>
+            </div>
           </div>
         )}
       </div>
