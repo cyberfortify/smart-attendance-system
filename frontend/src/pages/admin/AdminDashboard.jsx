@@ -1,4 +1,3 @@
-// AdminDashboardGlass.jsx
 import React, { useEffect, useState, useRef } from "react";
 
 import api from "../../api/axios";
@@ -146,7 +145,7 @@ export default function AdminDashboard() {
           ? `${analytics.avg_attendance_last_30}%`
           : "0"),
       subtitle: "Since last month",
-      change: "+2.3%", // ya jo bhi chaho
+      change: "+2.3%", 
     },
   ];
 
@@ -359,7 +358,6 @@ export default function AdminDashboard() {
       case "dashboard":
         return renderDashboard();
 
-      // PUri line replace karo:
       case "students":
         return (
           <div>
@@ -457,7 +455,7 @@ export default function AdminDashboard() {
                     onClick={() => {
                       setActiveTab(item.key);
 
-                      // 🔥 MOBILE FIX: tab click ke baad sidebar band karo
+                      // MOBILE FIX: tab click ke baad sidebar band karo
                       if (window.innerWidth < 1024) {
                         setIsSidebarOpen(false);
                       }

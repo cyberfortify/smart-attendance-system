@@ -1,16 +1,14 @@
 from datetime import date
 from flask import Blueprint, jsonify, request
-from ...services.attendance_service import (
-    get_student_attendance,
-    get_student_daily_attendance,
-    get_student_weekly_attendance,
-    get_student_monthly_attendance,
-)
+from ...services.attendance_service import get_student_attendance
+from ...services.attendance_service import get_student_daily_attendance
+from ...services.attendance_service import get_student_weekly_attendance
+from ...services.attendance_service import get_student_monthly_attendance
 
 from flask_jwt_extended import get_jwt_identity
 from ...utils.decorators import role_required
 
-# ✅ Global db import (Flask app context me available)
+# Global db import (Flask app context me available)
 from app.extensions import db
 from app.models.attendance_record import AttendanceRecord
 from app.models.attendance_session import AttendanceSession
@@ -21,19 +19,19 @@ student_bp = Blueprint("student", __name__)
 @student_bp.route("/me/attendance", methods=["GET"])
 @role_required("STUDENT")
 def my_attendance():
-    print("🚀 STUDENT ROUTE HIT!")
+    print(" STUDENT ROUTE HIT!")
     
     user_id = int(get_jwt_identity())
-    print(f"🔍 User ID from JWT: {user_id}")
+    print(f" User ID from JWT: {user_id}")
     
     # Find student
     student = Student.query.filter_by(user_id=user_id).first()
-    print(f"🔍 Student ID: {student.id if student else 'NOT FOUND'}")
+    print(f"Student ID: {student.id if student else 'NOT FOUND'}")
     
     if not student:
         return jsonify({"success": False, "error": "Student not found"}), 404
 
-    # ✅ YOUR EXISTING DATA (Aditya: 2 Present, 1 Absent)
+    # YOUR EXISTING DATA (tejas: 2 Present, 1 Absent)
     return jsonify({
         "success": True,
         "data": {
@@ -85,7 +83,7 @@ def my_analytics():
         monthly = get_student_monthly_attendance(student.id, year=year)
         series = [
             {
-                "label": f"M{row["month"]}",
+                "label": f"M{row['month']}",
                 "present": row["present"],
                 "absent": row["total"] - row["present"],
                 "percentage": row["percentage"],

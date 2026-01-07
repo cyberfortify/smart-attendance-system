@@ -8,7 +8,7 @@ import {
 export default function Navbar() {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const dropdownRef = useRef(null); // अब नहीं भी चाहिए, चाहो तो हटा सकते हो
+  const dropdownRef = useRef(null); 
 
   const navLinks = [
     { name: "Home", path: "/" },

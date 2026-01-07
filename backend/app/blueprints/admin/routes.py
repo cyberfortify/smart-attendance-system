@@ -202,7 +202,7 @@ def list_students():
 
     base_query = Student.query
 
-    # 🔍 SEARCH
+    #  SEARCH
     if q:
         like = f"%{q}%"
         base_query = base_query.join(User).filter(
@@ -213,7 +213,7 @@ def list_students():
             )
         )
 
-    # 🎯 CLASS FILTER (HARD SAFE)
+    #  CLASS FILTER (HARD SAFE)
     if raw_class_id not in (None, "", "undefined", "null"):
         try:
             class_id = int(raw_class_id)
@@ -313,8 +313,6 @@ def import_students_csv():
                     "row": idx,
                     "error": str(row_err)
                 })
-
-        # 🔥 ONE COMMIT ONLY
         db.session.commit()
 
     except Exception as e:

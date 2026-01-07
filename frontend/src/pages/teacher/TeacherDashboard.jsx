@@ -40,7 +40,6 @@ export default function TeacherDashboard() {
     { key: "attendance", label: "Take Attendance", icon: <ClipboardCheck className="w-4 h-4" /> },
     { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
     { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
-    // Reports tab removed from sidebar
     { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> },
     { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
   ];
@@ -81,7 +80,7 @@ export default function TeacherDashboard() {
         setDefaulterLoading(true);
         setLoadingStats(true);
 
-        // ✅ 1. Dashboard stats (API only)
+        // 1. Dashboard stats (API only)
         try {
           const res = await api.get("/teacher/dashboard");
           const d = res.data?.data || {};
@@ -93,10 +92,10 @@ export default function TeacherDashboard() {
           });
         } catch (statsErr) {
           console.warn("Stats API unavailable");
-          // ✅ No fallback - 0 values
+          //  No fallback - 0 values
         }
 
-        // ✅ 2. Attendance summary (API only)
+        //  2. Attendance summary (API only)
         try {
           const sRes = await api.get("/teacher/attendance/summary");
           const s = sRes.data?.data || {};
@@ -133,7 +132,7 @@ export default function TeacherDashboard() {
       }
     }
 
-    // ✅ Load sirf jab classes available ho
+    // Load sirf jab classes available ho
     if (classes.length > 0) {
       loadDashboard();
     }
@@ -209,7 +208,7 @@ export default function TeacherDashboard() {
                     onClick={() => {
                       setActiveTab(item.key);
 
-                      // ✅ Mobile pe sidebar auto-close
+                      // Mobile pe sidebar auto-close
                       if (window.innerWidth < 1024) {
                         setIsSidebarOpen(false);
                       }
@@ -432,7 +431,7 @@ export default function TeacherDashboard() {
                     <p className="text-slate-600 text-sm">Attendance below 75%</p>
                   </div>
 
-                  {/* ✅ Class Selector */}
+                  {/* Class Selector */}
                   <select
                     value={defaulterClassId}
                     onChange={(e) => setDefaulterClassId(Number(e.target.value))}

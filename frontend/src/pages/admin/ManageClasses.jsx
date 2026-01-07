@@ -29,7 +29,7 @@ export default function ManageClasses() {
 
 
   const stats = {
-    activeClasses: classes.length, // ya tumhara logic, abhi simple
+    activeClasses: classes.length,
     totalSections: new Set(classes.map(c => c.section).filter(Boolean)).size,
     thisYear: classes.filter(c => c.year === currentYear).length,
     nextYear: classes.filter(c => c.year === nextYear).length,

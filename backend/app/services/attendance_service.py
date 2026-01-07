@@ -1,4 +1,3 @@
-# app/services/attendance_service.py
 from typing import List, Dict, Any, Optional
 from unittest import case
 from sqlalchemy import asc, func
@@ -219,10 +218,10 @@ def save_records(session_id: int, records: list):
         if not session:
             raise APIError("Attendance session not found", status_code=404)
 
-        # ❌ Delete old records first
+        # Delete old records first
         AttendanceRecord.query.filter_by(session_id=session_id).delete()
 
-        # ✅ Insert new records
+        # Insert new records
         objs = []
         for rec in records:
             obj = AttendanceRecord(

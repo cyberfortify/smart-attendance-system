@@ -1,4 +1,3 @@
-# app/blueprints/teacher/routes.py
 from datetime import date, datetime
 
 from flask import Blueprint, request, jsonify
@@ -59,13 +58,14 @@ def teacher_dashboard():
         or 0
     )
 
-    # 3) Latest attendance session (🔥 FIX)
+    # 3) Latest attendance session (FIX)
     latest_session = (
         db.session.query(AttendanceSession)
         .filter(AttendanceSession.teacher_id == teacher.id)
         .order_by(AttendanceSession.session_date.desc())
         .first()
     )
+
 
     if latest_session:
         total_records = (

@@ -1,5 +1,3 @@
-// src/api/axios.js
-
 import axios from "axios";
 import { getToken, clearAuth } from "../utils/auth";
 
@@ -31,7 +29,7 @@ api.interceptors.response.use(
   }
 );
 
-// ✅ helper functions (including fetchTeacherClasses)
+// helper functions (including fetchTeacherClasses)
 export async function fetchClassDaily(classId, from, to) {
   const res = await api.get(`/reports/class/daily`, {
     params: { class_id: classId, from, to },
@@ -53,7 +51,6 @@ export async function fetchDefaulters(classId, threshold = 75, from, to) {
   return res.data.data;
 }
 
-// 👇 ye wala function zaroor hona chahiye
 export async function fetchTeacherClasses() {
   const res = await api.get(`/teacher/classes`);
   return res.data.data;

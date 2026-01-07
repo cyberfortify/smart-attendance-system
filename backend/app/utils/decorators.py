@@ -18,11 +18,11 @@ def role_required(*allowed_roles):
         @wraps(fn)
         def wrapper(*args, **kwargs):
 
-            # ✅ VERY IMPORTANT: allow CORS preflight
+            # VERY IMPORTANT: allow CORS preflight
             if request.method == "OPTIONS":
                 return "", 200
 
-            # ✅ Verify JWT only for real requests
+            # Verify JWT only for real requests
             verify_jwt_in_request()
             claims = get_jwt()
             role = claims.get("role")

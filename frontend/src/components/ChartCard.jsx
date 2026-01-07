@@ -55,7 +55,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
     maintainAspectRatio: false,
     layout: {
       padding: {
-        top: 16,     // 🔥 THIS FIXES THE CUT
+        top: 16,     // THIS FIXES THE CUT
         right: 8,
         left: 8,
         bottom: 8

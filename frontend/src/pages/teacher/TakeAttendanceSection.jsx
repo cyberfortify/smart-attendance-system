@@ -1,4 +1,3 @@
-// src/components/teacher/TakeAttendanceSection.jsx
 import React, { useEffect, useState } from "react";
 import api, { fetchTeacherClasses } from "../../api/axios";
 import AttendanceTable from "../../components/AttendanceTable";
@@ -15,7 +14,7 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
-  // 1️⃣ Load teacher classes
+  // 1️ Load teacher classes
   useEffect(() => {
     async function loadClasses() {
       try {
@@ -31,7 +30,7 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
     loadClasses();
   }, []);
 
-  // 2️⃣ Load students when class changes
+  // 2️ Load students when class changes
   useEffect(() => {
     async function loadStudents() {
       if (!classId) {
@@ -80,7 +79,6 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
     setConfirmOpen(true);
   }
 
-  // ✅ FINAL FIXED SAVE LOGIC (409 SAFE)
   async function handleConfirm() {
     setConfirmOpen(false);
     setLoading(true);
@@ -100,14 +98,14 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
       let sessionId;
 
       try {
-        // 1️⃣ Try to create session
+        // 1️ Try to create session
         const res = await api.post("/teacher/sessions", {
           class_id: Number(classId),
           session_date: date,
         });
         sessionId = res.data.data.session_id;
       } catch (err) {
-        // 2️⃣ If already exists (409), reuse existing session
+        // 2️ If already exists (409), reuse existing session
         if (err.response?.status === 409) {
           const year = new Date(date).getFullYear();
           const sessionsRes = await api.get("/teacher/sessions", {
@@ -126,8 +124,7 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
           throw err;
         }
       }
-
-      // 3️⃣ Save attendance records
+      // 3️ Save attendance records
       await api.put(`/teacher/sessions/${sessionId}/records`, records);
 
       showToast("Attendance saved successfully", "success");

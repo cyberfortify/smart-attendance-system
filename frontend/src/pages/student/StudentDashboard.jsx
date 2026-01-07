@@ -57,7 +57,6 @@ export default function StudentDashboard() {
         setAttendanceSummary(summaryData);
 
         // 2) Current range analytics (custom endpoint - tum banaoge)
-        // For now, agar /student/me/analytics nahi hai to fallback same summary se ek fake series bana do
         try {
           const analyticsRes = await api.get("/student/me/analytics", {
             params: { range },
@@ -67,20 +66,13 @@ export default function StudentDashboard() {
         } catch (_err) {
           // Fallback: single point series from summary
           if (summaryData) {
-            setSeries([
-              {
-                label: "Overall",
-                present: summaryData.present,
-                absent: summaryData.absent,
-                percentage: summaryData.percentage,
-              },
-            ]);
+            setSeries([]);
           } else {
             setSeries([]);
           }
         }
 
-        // 3) Yearly/monthly data from /student/me/graphs (tumhare paas already hai)
+        // 3) Yearly/monthly data from /student/me/graphs 
         try {
           const graphsRes = await api.get("/student/me/graphs");
           const graphsData = graphsRes.data?.data || {};
@@ -298,7 +290,7 @@ export default function StudentDashboard() {
                     className={`${glassCard} p-6 group hover:scale-[1.02] transition-all duration-300`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                     
+
                       <span className="text-xs font-medium text-rose-600 bg-rose-100 px-2 py-1 rounded-full">
                         Absent
                       </span>
@@ -336,7 +328,7 @@ export default function StudentDashboard() {
                 {/* Pie + small trend */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Pie */}
-                  {!loading && attendanceSummary && (
+                  {!loading && attendanceSummary && totalSessions > 0 && (
                     <div className={`${glassCard} p-4 sm:p-6`}>
                       <div className="flex items-center justify-between mb-4 sm:mb-6">
                         <div>
@@ -359,7 +351,7 @@ export default function StudentDashboard() {
                   )}
 
                   {/* Mini trend */}
-                  {series.length > 0 && (
+                  {series.length > 0 && totalSessions > 0 && (
                     <div className={`${glassCard} p-4 sm:p-6`}>
                       <div className="flex items-center justify-between mb-3 sm:mb-4">
                         <div>
@@ -439,7 +431,7 @@ export default function StudentDashboard() {
                   )}
 
                   {/* Bar chart per time bucket */}
-                  {series.length > 0 && (
+                  {series.length > 0 && totalSessions > 0 && (
                     <div className="mt-6">
                       <h4 className="text-sm font-semibold mb-2 text-slate-800">
                         {range === "day" && "Last 7 days presence"}
