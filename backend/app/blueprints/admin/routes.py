@@ -29,6 +29,7 @@ cache = Cache(config={"CACHE_TYPE": "SimpleCache"})
 
 admin_bp = Blueprint("admin", __name__)
 
+# ---------- Admin notifications ----------
 @admin_bp.route("/notifications", methods=["GET"])
 @role_required("ADMIN")
 def admin_notifications():
@@ -71,7 +72,7 @@ def admin_notifications():
         print("Notifications error:", e)
         raise APIError("Failed to load notifications", status_code=500)
 
-
+# ---------- Class create + list + update + delete ----------
 @admin_bp.route("/classes", methods=["POST"])
 @role_required("ADMIN")
 @validate_json({"name": str, "section": None, "year": None})
@@ -96,16 +97,12 @@ def create_class():
     db.session.commit()
     return jsonify({"success": True, "data": {"id": klass.id, "name": klass.name}}), 201
 
-
 @admin_bp.route("/classes", methods=["GET"])
 @role_required("ADMIN")
 def list_classes():
     classes = SchoolClass.query.all()
     data = [{"id": c.id, "name": c.name, "section": c.section, "year": c.year} for c in classes]
     return jsonify({"success": True, "data": data})
-
-
-# ---------- Class update ----------
 
 @admin_bp.route("/classes/<int:class_id>", methods=["PUT"])
 @role_required("ADMIN")
@@ -126,7 +123,6 @@ def update_class(class_id):
     db.session.commit()
     return jsonify({"success": True, "data": {"id": klass.id, "name": klass.name, "section": klass.section, "year": klass.year}})
 
-
 @admin_bp.route("/classes/<int:class_id>", methods=["DELETE"])
 @role_required("ADMIN")
 def delete_class(class_id):
@@ -138,7 +134,7 @@ def delete_class(class_id):
     return jsonify({"success": True, "message": "Class deleted"})
 
 
-# Student create + list + update + delete
+# ---------- Student create + list + update + delete ----------
 @admin_bp.route("/students", methods=["POST"])
 @role_required("ADMIN")
 @validate_json({"name": str, "email": str, "password": str, "roll_no": None, "class_id": None})
@@ -185,7 +181,6 @@ def create_student():
 
     return jsonify({"success": True, "data": student.to_dict()}), 201
 
-# admin/routes.py (example)
 @admin_bp.route("/students", methods=["GET"])
 @role_required("ADMIN")
 def list_students():
@@ -360,6 +355,24 @@ def update_student(student_id):
     db.session.commit()
     return jsonify({"success": True, "data": student.to_dict()})
 
+@admin_bp.route("/students/stats", methods=["GET"])
+@role_required("ADMIN")
+def student_stats():
+    total = Student.query.count()
+    with_class = Student.query.filter(Student.class_id.isnot(None)).count()
+
+    start_month = datetime.utcnow().date().replace(day=1)
+    new_this_month = Student.query.filter(Student.created_at >= start_month).count()
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "total": total,
+            "with_class": with_class,
+            "new_this_month": new_this_month,
+        }
+    })
+
 
 @admin_bp.route("/students/<int:student_id>", methods=["DELETE"])
 @role_required("ADMIN")
@@ -405,8 +418,7 @@ def export_students_csv():
     })
 
 
-# ---------- Teacher create + list (safer) ----------
-
+# ---------- Teacher create + list ----------
 @admin_bp.route("/teachers", methods=["GET"])
 @role_required("ADMIN")
 def list_teachers():
@@ -421,7 +433,6 @@ def list_teachers():
             "email": u.email
         })
     return jsonify({"success": True, "data": data})
-
 
 @admin_bp.route("/teachers", methods=["POST"])
 @role_required("ADMIN")
@@ -448,8 +459,6 @@ def create_teacher():
 
     return jsonify({"success": True, "data": {"user_id": user.id, "teacher_profile_id": teacher.id, "name": user.name, "email": user.email}}), 201
 
-
-# Add this POST endpoint to assign a teacher to a class
 @admin_bp.route("/teacher-classes", methods=["POST"])
 @role_required("ADMIN")
 def assign_teacher_to_class():
@@ -554,10 +563,7 @@ def unassign_teacher_from_class():
     db.session.commit()
     return jsonify({"success": True, "message": "Mapping deleted"})
 
-
-
-# ---------- Analytics endpoint ----------
-
+# --------- Admin analytics ----------
 @admin_bp.route("/analytics", methods=["GET"])
 @role_required("ADMIN")
 def admin_analytics():
@@ -651,47 +657,50 @@ def attendance_trend():
 @admin_bp.route("/analytics/attendance-pie", methods=["GET"])
 @role_required("ADMIN")
 def attendance_pie():
-    """
-    Pie chart derived from average attendance:
-    present = avg_attendance
-    absent = 100 - avg_attendance
-    """
     try:
-        # Reuse admin_analytics ka logic ya direct compute
-        thirty = datetime.utcnow().date() - timedelta(days=30)
+        period = request.args.get("period", "30d")
+        days_map = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}
+        days = days_map.get(period, 30)
 
-        subq = db.session.query(
-            AttendanceRecord.session_id.label("sid"),
-            func.sum(
-                case((AttendanceRecord.status == "PRESENT", 1), else_=0)
-            ).label("present"),
-            func.count(AttendanceRecord.id).label("total"),
-        ).join(
-            AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
-        ).filter(
-            AttendanceSession.session_date >= thirty
-        ).group_by(
-            AttendanceRecord.session_id
-        ).subquery()
+        today = datetime.utcnow().date()
+        start_date = today - timedelta(days=days - 1)
 
-        rows = db.session.query(
-            func.avg((subq.c.present * 1.0) / subq.c.total * 100)
-        ).all()
-        avg_attendance = float(rows[0][0] or 0.0)
+        present_count = db.session.query(func.count(AttendanceRecord.id)) \
+            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id) \
+            .filter(
+                AttendanceSession.session_date >= start_date,
+                AttendanceSession.session_date <= today,
+                AttendanceRecord.status == "PRESENT"
+            ).scalar() or 0
 
-        present_pct = round(avg_attendance, 1)
-        absent_pct = round(max(0.0, 100.0 - present_pct), 1)
+        absent_count = db.session.query(func.count(AttendanceRecord.id)) \
+            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id) \
+            .filter(
+                AttendanceSession.session_date >= start_date,
+                AttendanceSession.session_date <= today,
+                AttendanceRecord.status == "ABSENT"
+            ).scalar() or 0
+
+        total = present_count + absent_count
+
+        if total > 0:
+            present_pct = round((present_count / total) * 100, 1)
+            absent_pct = round((absent_count / total) * 100, 1)
+        else:
+            present_pct = 0.0
+            absent_pct = 0.0
 
         return jsonify({
             "success": True,
             "data": {
                 "present": present_pct,
                 "absent": absent_pct,
-                "present_count": None,
-                "absent_count": None,
-                "total": None,
+                "present_count": present_count,
+                "absent_count": absent_count,
+                "total": total,
             }
         })
+
     except Exception as e:
         print("Attendance pie error:", e)
         raise APIError("Failed to compute pie data", status_code=500)
@@ -823,7 +832,7 @@ def class_performance():
         print("Class performance error:", e)
         raise APIError("Failed to compute class performance", status_code=500)
 
-
+# --------- Admin activity feed ----------
 @admin_bp.route("/activity", methods=["GET"])
 @role_required("ADMIN")
 def admin_activity():

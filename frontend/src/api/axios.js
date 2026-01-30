@@ -56,4 +56,12 @@ export async function fetchTeacherClasses() {
   return res.data.data;
 }
 
+export async function fetchTeacherStudents(classId) {
+  const res = await api.get("/teacher/students", {
+    params: classId ? { class_id: classId } : {}
+  });
+  return res.data?.data || [];
+}
+
+
 export default api;

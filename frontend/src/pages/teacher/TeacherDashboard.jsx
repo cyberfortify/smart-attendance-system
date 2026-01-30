@@ -38,10 +38,10 @@ export default function TeacherDashboard() {
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
     { key: "attendance", label: "Take Attendance", icon: <ClipboardCheck className="w-4 h-4" /> },
-    { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
-    { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
-    { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> },
-    { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
+    // { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
+    // { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
+    { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> }
+    // { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
   ];
 
   const [stats, setStats] = useState({
@@ -73,65 +73,63 @@ export default function TeacherDashboard() {
     loadClasses();
   }, []);
 
+  async function loadDashboard() {
+    try {
+      setDefaulterLoading(true);
+      setLoadingStats(true);
 
-  useEffect(() => {
-    async function loadDashboard() {
+      // 1. Dashboard stats (API only)
       try {
-        setDefaulterLoading(true);
-        setLoadingStats(true);
-
-        // 1. Dashboard stats (API only)
-        try {
-          const res = await api.get("/teacher/dashboard");
-          const d = res.data?.data || {};
-          setStats({
-            totalStudents: d.total_students || 0,
-            todayAttendance: d.today_attendance_rate || 0,
-            pendingTasks: d.pending_tasks || 0,
-            upcomingClasses: d.upcoming_classes || 0,
-          });
-        } catch (statsErr) {
-          console.warn("Stats API unavailable");
-          //  No fallback - 0 values
-        }
-
-        //  2. Attendance summary (API only)
-        try {
-          const sRes = await api.get("/teacher/attendance/summary");
-          const s = sRes.data?.data || {};
-          setSummary({
-            presentCount: s.present_count || 0,
-            absentCount: s.absent_count || 0,
-          });
-        } catch (summaryErr) {
-          console.warn("Summary API unavailable");
-          // No fallback - 0 values
-        }
-
-        //  3. Defaulters (API only - tumhara route)
-        if (classes.length > 0) {
-          try {
-            const defaulterRes = await api.get("/reports/defaulters", {
-              params: {
-                class_id: classes[0].id,
-                threshold: 75
-              }
-            });
-            setDefaulters(defaulterRes.data?.data || []);
-          } catch (defErr) {
-            console.warn("Defaulters API unavailable:", defErr.response?.status);
-            setDefaulters([]);  // Empty array only
-          }
-        }
-
-      } catch (err) {
-        console.error("Dashboard error:", err);
-      } finally {
-        setLoadingStats(false);
-        setDefaulterLoading(false);
+        const res = await api.get("/teacher/dashboard");
+        const d = res.data?.data || {};
+        setStats({
+          totalStudents: d.total_students || 0,
+          todayAttendance: d.today_attendance_rate || 0,
+          pendingTasks: d.pending_tasks || 0,
+          upcomingClasses: d.upcoming_classes || 0,
+        });
+      } catch (statsErr) {
+        console.warn("Stats API unavailable");
+        //  No fallback - 0 values
       }
-    }
 
+      //  2. Attendance summary (API only)
+      try {
+        const sRes = await api.get("/teacher/attendance/summary");
+        const s = sRes.data?.data || {};
+        setSummary({
+          presentCount: s.present_count || 0,
+          absentCount: s.absent_count || 0,
+        });
+      } catch (summaryErr) {
+        console.warn("Summary API unavailable");
+        // No fallback - 0 values
+      }
+
+      //  3. Defaulters (API only - tumhara route)
+      if (classes.length > 0) {
+        try {
+          const defaulterRes = await api.get("/reports/defaulters", {
+            params: {
+              class_id: classes[0].id,
+              threshold: 75
+            }
+          });
+          setDefaulters(defaulterRes.data?.data || []);
+        } catch (defErr) {
+          console.warn("Defaulters API unavailable:", defErr.response?.status);
+          setDefaulters([]);  // Empty array only
+        }
+      }
+
+    } catch (err) {
+      console.error("Dashboard error:", err);
+    } finally {
+      setLoadingStats(false);
+      setDefaulterLoading(false);
+    }
+  }
+  useEffect(() => {
     // Load sirf jab classes available ho
     if (classes.length > 0) {
       loadDashboard();
@@ -297,10 +295,10 @@ export default function TeacherDashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-semibold text-slate-900">
-                          Present vs Absent
+                          Overall Attendance Summary
                         </div>
                         <div className="text-xs text-slate-600 mt-1">
-                          Based on recent records
+                          Present vs Absent Records
                         </div>
                       </div>
                     </div>
@@ -405,23 +403,28 @@ export default function TeacherDashboard() {
             {activeTab === "attendance" && (
               <TakeAttendanceSection
                 glassCard={glassCard}
-                onDone={() => setActiveTab("dashboard")}
+                onDone={async () => {
+                  await new Promise(r => setTimeout(r, 300));
+                  refreshDashboard();
+                  setActiveTab("dashboard");
+                }}
                 showToast={(msg, variant = "success") =>
                   setToast({ message: msg, variant })
                 }
               />
 
+
             )}
-            {activeTab === "students" && (
+            {/* {activeTab === "students" && (
               <div className={glassCard + " p-4"}>
                 Students UI will come here.
               </div>
-            )}
-            {activeTab === "assignments" && (
+            )} */}
+            {/* {activeTab === "assignments" && (
               <div className={glassCard + " p-4"}>
                 Assignments UI will come here.
               </div>
-            )}
+            )} */}
             {activeTab === "defaulters" && (
               <div className={`${glassCard} p-6 space-y-6`}>
                 {/* Header + Class Selector */}
@@ -497,13 +500,11 @@ export default function TeacherDashboard() {
                 )}
               </div>
             )}
-
-
-            {activeTab === "schedule" && (
+            {/* {activeTab === "schedule" && (
               <div className={glassCard + " p-4"}>
                 Schedule UI will come here.
               </div>
-            )}
+            )} */}
           </main>
         </div>
       </div>

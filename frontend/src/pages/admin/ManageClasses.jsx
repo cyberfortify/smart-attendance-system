@@ -98,7 +98,6 @@ export default function ManageClasses() {
     return matchesSearch && matchesFilter;
   });
 
-
   // Get unique years for filter
   const uniqueYears = [...new Set(classes.map(c => c.year.toString()))];
 
@@ -179,8 +178,8 @@ export default function ManageClasses() {
 
       </div>
 
+  
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
         {/* Class List */}
         <div className="lg:col-span-2 order-2 lg:order-1">
           <div className={`${glassCard} overflow-auto h-[60vh] md:h-[calc(100vh-150px)]`}>
@@ -188,7 +187,6 @@ export default function ManageClasses() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">Class List</h2>
-                  <p className="text-slate-600 text-sm mt-1">Manage all classes in your institution</p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -233,7 +231,7 @@ export default function ManageClasses() {
                       <th className="text-left p-4 font-semibold">Class</th>
                       <th className="text-left p-4 font-semibold">Section</th>
                       <th className="text-left p-4 font-semibold">Year</th>
-                      <th className="text-left p-4 font-semibold">Status</th>
+                      {/* <th className="text-left p-4 font-semibold">Status</th> */}
                       <th className="text-left p-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -259,17 +257,17 @@ export default function ManageClasses() {
 
                         <td className="p-4">{cls.year}</td>
 
-                        <td className="p-4">
+                        {/* <td className="p-4">
                           <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">
                             Active
                           </span>
-                        </td>
+                        </td> */}
 
                         <td className="p-4">
                           <div className="flex gap-2">
-                            <button className="p-2 hover:bg-blue-50 rounded-lg">
+                            {/* <button className="p-2 hover:bg-blue-50 rounded-lg">
                               <Edit2 className="w-4 h-4 text-blue-600" />
-                            </button>
+                            </button> */}
                             <button
                               onClick={() => setShowDeleteConfirm(cls.id)}
                               className="p-2 hover:bg-red-50 rounded-lg"

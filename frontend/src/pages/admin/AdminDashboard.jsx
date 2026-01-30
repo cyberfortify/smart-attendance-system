@@ -60,8 +60,6 @@ export default function AdminDashboard() {
     }
   }
 
-
-
   const glassCard = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
 
   const glassMainContent = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
@@ -514,12 +512,12 @@ export default function AdminDashboard() {
                   >
                     <ChevronRight className="w-5 h-5 rotate-180 stroke-[2.5]" />
                   </button>
-                  <div className="hidden md:flex items-center bg-white/20 px-3 py-2 rounded-full border border-black/10">
+                  {/* <div className="hidden md:flex items-center bg-white/20 px-3 py-2 rounded-full border border-black/10">
                     <input
                       placeholder="Search..."
                       className="bg-transparent outline-none text-sm text-slate-700"
                     />
-                  </div>
+                  </div> */}
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">

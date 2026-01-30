@@ -160,7 +160,7 @@ export default function About() {
               </Link>
               <button className="inline-flex items-center gap-2 px-6 py-3 bg-white text-slate-700 rounded-full hover:bg-slate-50 border border-slate-200 shadow-sm hover:shadow transition-all font-medium">
                 <MessageSquare className="w-4 h-4" />
-                Contact
+                <a href="/contact">Contact</a>
               </button>
             </div>
           </div>

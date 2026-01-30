@@ -51,6 +51,8 @@ export default function ManageStudents({ onStudentChanged }) {
   const [withClassCount, setWithClassCount] = useState(0);
   const [newThisMonthCount, setNewThisMonthCount] = useState(0);
   const [selectedClassId, setSelectedClassId] = useState("");
+  const [importing, setImporting] = useState(false);
+
 
   const glassCard = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
 
@@ -62,7 +64,7 @@ export default function ManageStudents({ onStudentChanged }) {
           q: search,
           page,
           per_page: perPage,
-          class_id: selectedClassId || undefined,  
+          class_id: selectedClassId || undefined,
         },
       });
 
@@ -179,6 +181,7 @@ export default function ManageStudents({ onStudentChanged }) {
     const formData = new FormData();
     formData.append("file", file);
 
+    setImporting(true);
     setIsLoading(true);
     try {
       const res = await api.post("/admin/students/import", formData, {
@@ -228,6 +231,7 @@ export default function ManageStudents({ onStudentChanged }) {
         variant: "error",
       });
     } finally {
+      setImporting(false);
       setIsLoading(false);
     }
   }
@@ -243,8 +247,6 @@ export default function ManageStudents({ onStudentChanged }) {
     withClass: withClassCount,
     newThisMonth: newThisMonthCount,
   };
-
-
 
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden relative">
@@ -358,10 +360,7 @@ export default function ManageStudents({ onStudentChanged }) {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Password
-                  <span className="text-slate-500 text-xs ml-1">
-                    (leave blank for auto-generate)
-                  </span>
+                  Password <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400">
@@ -402,7 +401,7 @@ export default function ManageStudents({ onStudentChanged }) {
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Class
-                  <span className="text-slate-500 text-xs ml-1">(optional)</span>
+                  <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -422,10 +421,7 @@ export default function ManageStudents({ onStudentChanged }) {
               </div>
             </div>
 
-            <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-200/60">
-              <div className="text-sm text-slate-600">
-                <span className="text-red-500">*</span> Required fields
-              </div>
+            <div className="flex items-center justify-end mt-6 pt-6 border-t border-slate-200/60">
               <button
                 onClick={handleCreate}
                 disabled={isLoading || !form.name || !form.email || !form.roll_no}
@@ -450,26 +446,39 @@ export default function ManageStudents({ onStudentChanged }) {
           </div>
         </div>
 
-
+        {/* Right: Quick Actions + Search */}
         <div className="space-y-3 sm:space-y-4 mt-4 lg:mt-0">
-          {/* Quick Actions card (ab upar) */}
+          {/* Quick Actions card */}
           <div className={`${glassCard} p-4`}>
             <h3 className="font-semibold text-slate-900 mb-3 text-sm sm:text-base">
               Quick Actions
             </h3>
             <div className="space-y-2.5">
               <button
+                disabled={importing}
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-left transition-colors group"
+                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors
+    ${importing ? "bg-slate-100 cursor-not-allowed" : "bg-white/70 hover:bg-white"}
+  `}
               >
-                <div className="p-2 bg-blue-50 rounded-lg border border-blue-100">
-                  <Upload className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
-                  <div className="text-xs text-slate-500">Upload CSV file</div>
-                </div>
+                {importing ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="text-sm font-medium text-slate-700">
+                      Importing students...
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
+                      <div className="text-xs text-slate-500">Upload CSV file</div>
+                    </div>
+                  </>
+                )}
               </button>
+
 
               <button
                 onClick={exportCSV}
@@ -616,9 +625,9 @@ export default function ManageStudents({ onStudentChanged }) {
                     Roll No</th>
                   <th className="text-left px-3 py-2 sm:p-4 font-semibold text-slate-700">
                     Class</th>
-                  <th className="hidden md:table-cell text-left px-3 py-2 sm:p-4 font-semibold text-slate-700">
+                  {/* <th className="hidden md:table-cell text-left px-3 py-2 sm:p-4 font-semibold text-slate-700">
                     Status
-                  </th>
+                  </th> */}
                   <th className="hidden md:table-cell text-left px-3 py-2 sm:p-4 font-semibold text-slate-700">
                     Actions
                   </th>
@@ -656,12 +665,12 @@ export default function ManageStudents({ onStudentChanged }) {
                         <span className="text-slate-400 text-sm">Not assigned</span>
                       )}
                     </td>
-                    <td className="hidden md:table-cell p-4">
+                    {/* <td className="hidden md:table-cell p-4">
                       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800">
                         <CheckCircle className="w-4 h-4" />
                         Active
                       </span>
-                    </td>
+                    </td> */}
 
                     {/* Actions – desktop only */}
                     <td className="hidden md:table-cell p-4">
@@ -718,9 +727,9 @@ export default function ManageStudents({ onStudentChanged }) {
                 </div>
 
                 <div className="flex items-center justify-between mt-4">
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">
+                  {/* <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">
                     Active
-                  </span>
+                  </span> */}
 
                   <div className="flex gap-2">
                     <button

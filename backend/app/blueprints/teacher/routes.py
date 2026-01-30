@@ -21,6 +21,7 @@ from ...services.attendance_service import (
 from ...utils.decorators import role_required
 from ...utils.validators import validate_json
 from ...utils.errors import APIError
+from app.models import teacher
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/api/teacher")
 
@@ -42,15 +43,16 @@ def _get_current_teacher():
 @role_required("TEACHER")
 def teacher_dashboard():
     teacher = _get_current_teacher()
+    today = date.today()
 
-    # 1) Teacher ke assigned classes
+    # Assigned classes
     teacher_class_ids = (
         db.session.query(TeacherClass.class_id)
         .filter(TeacherClass.teacher_id == teacher.id)
         .scalar_subquery()
     )
 
-    # 2) Total unique students
+    # Total students
     total_students = (
         db.session.query(func.count(func.distinct(Student.id)))
         .filter(Student.class_id.in_(teacher_class_ids))
@@ -58,39 +60,37 @@ def teacher_dashboard():
         or 0
     )
 
-    # 3) Latest attendance session (FIX)
-    latest_session = (
-        db.session.query(AttendanceSession)
-        .filter(AttendanceSession.teacher_id == teacher.id)
-        .order_by(AttendanceSession.session_date.desc())
-        .first()
+    #  TODAY ATTENDANCE (ALL CLASSES)
+    today_sessions = (
+        db.session.query(AttendanceSession.id)
+        .filter(
+            AttendanceSession.teacher_id == teacher.id,
+            AttendanceSession.session_date == today
+        )
+        .scalar_subquery()
     )
 
+    total_records = (
+        db.session.query(func.count(AttendanceRecord.id))
+        .filter(AttendanceRecord.session_id.in_(today_sessions))
+        .scalar()
+        or 0
+    )
 
-    if latest_session:
-        total_records = (
-            db.session.query(func.count(AttendanceRecord.id))
-            .filter(AttendanceRecord.session_id == latest_session.id)
-            .scalar()
-            or 0
+    present_records = (
+        db.session.query(func.count(AttendanceRecord.id))
+        .filter(
+            AttendanceRecord.session_id.in_(today_sessions),
+            AttendanceRecord.status == "PRESENT",
         )
+        .scalar()
+        or 0
+    )
 
-        present_records = (
-            db.session.query(func.count(AttendanceRecord.id))
-            .filter(
-                AttendanceRecord.session_id == latest_session.id,
-                AttendanceRecord.status == "PRESENT",
-            )
-            .scalar()
-            or 0
-        )
-
-        today_attendance_rate = (
-            round((present_records * 100) / total_records)
-            if total_records > 0 else 0
-        )
-    else:
-        today_attendance_rate = 0
+    today_attendance_rate = (
+        round((present_records * 100) / total_records)
+        if total_records > 0 else 0
+    )
 
     return jsonify({
         "success": True,
@@ -228,21 +228,85 @@ def teacher_list_sessions():
     return jsonify({"success": True, "data": sessions}), 200
 
 
+# @teacher_bp.route("/sessions/<int:session_id>/records", methods=["PUT"])
+# @role_required("TEACHER")
+# def update_session_records(session_id):
+#     """
+#     Replace/update attendance records for a session.
+#     Body: [
+#       { "student_id": int, "status": "PRESENT"|"ABSENT", "remarks": "..." },
+#       ...
+#     ]
+#     """
+#     data = request.get_json(silent=True)
+#     if data is None:
+#         raise APIError("Request body must be JSON", status_code=400)
+#     if not isinstance(data, list):
+#         raise APIError("Expected a list of records", status_code=400)
+
+#     teacher = _get_current_teacher()
+
+#     session = AttendanceSession.query.filter_by(id=session_id).first()
+#     if not session:
+#         raise APIError("Session not found", status_code=404)
+#     if session.teacher_id != teacher.id:
+#         raise APIError("Forbidden: you do not own this session", status_code=403)
+
+#     # Validate records
+#     for idx, rec in enumerate(data):
+#         if not isinstance(rec, dict):
+#             raise APIError(f"Record at index {idx} must be an object", status_code=400)
+#         if "student_id" not in rec or "status" not in rec:
+#             raise APIError(
+#                 f"Record at index {idx} missing 'student_id' or 'status'", status_code=400
+#             )
+#         try:
+#             rec_student_id = int(rec["student_id"])
+#             rec["student_id"] = rec_student_id
+#         except Exception:
+#             raise APIError(
+#                 f"Record at index {idx} has invalid 'student_id'", status_code=400
+#             )
+#         if rec["status"] not in ("PRESENT", "ABSENT"):
+#             raise APIError(
+#                 f"Record at index {idx} has invalid 'status' (must be 'PRESENT' or 'ABSENT')",
+#                 status_code=400,
+#             )
+#         if (
+#             "remarks" in rec
+#             and rec["remarks"] is not None
+#             and not isinstance(rec["remarks"], str)
+#         ):
+#             raise APIError(
+#                 f"Record at index {idx} 'remarks' must be a string", status_code=400
+#             )
+
+#     # Save attendance records (FINAL FIX)
+#     try:
+#         save_records(session_id=session_id, records=data)
+
+#     except APIError as e:
+#         #  Business / validation error → same status return
+#         raise e
+
+#     except Exception:
+#         #  Real server error
+#         raise APIError("Failed to save attendance", status_code=500)
+
+#     #  ONLY SUCCESS PATH
+#     return jsonify({
+#         "success": True,
+#         "message": "Attendance saved successfully"
+#     }), 200
+
+
+
 @teacher_bp.route("/sessions/<int:session_id>/records", methods=["PUT"])
 @role_required("TEACHER")
 def update_session_records(session_id):
-    """
-    Replace/update attendance records for a session.
-    Body: [
-      { "student_id": int, "status": "PRESENT"|"ABSENT", "remarks": "..." },
-      ...
-    ]
-    """
     data = request.get_json(silent=True)
-    if data is None:
-        raise APIError("Request body must be JSON", status_code=400)
-    if not isinstance(data, list):
-        raise APIError("Expected a list of records", status_code=400)
+    if data is None or not isinstance(data, list):
+        raise APIError("Invalid request body", status_code=400)
 
     teacher = _get_current_teacher()
 
@@ -250,45 +314,24 @@ def update_session_records(session_id):
     if not session:
         raise APIError("Session not found", status_code=404)
     if session.teacher_id != teacher.id:
-        raise APIError("Forbidden: you do not own this session", status_code=403)
+        raise APIError("Forbidden", status_code=403)
 
-    # Validate records
-    for idx, rec in enumerate(data):
-        if not isinstance(rec, dict):
-            raise APIError(f"Record at index {idx} must be an object", status_code=400)
-        if "student_id" not in rec or "status" not in rec:
-            raise APIError(
-                f"Record at index {idx} missing 'student_id' or 'status'", status_code=400
-            )
-        try:
-            rec_student_id = int(rec["student_id"])
-            rec["student_id"] = rec_student_id
-        except Exception:
-            raise APIError(
-                f"Record at index {idx} has invalid 'student_id'", status_code=400
-            )
-        if rec["status"] not in ("PRESENT", "ABSENT"):
-            raise APIError(
-                f"Record at index {idx} has invalid 'status' (must be 'PRESENT' or 'ABSENT')",
-                status_code=400,
-            )
-        if (
-            "remarks" in rec
-            and rec["remarks"] is not None
-            and not isinstance(rec["remarks"], str)
-        ):
-            raise APIError(
-                f"Record at index {idx} 'remarks' must be a string", status_code=400
-            )
-
-    # Save transactionally
+    # ONLY THIS TRY BLOCK
     try:
         save_records(session_id=session_id, records=data)
-    except Exception as e:
-        # save_records should handle commit/rollback internally
-        raise APIError(f"Failed to update records: {str(e)}", status_code=500)
 
-    return jsonify({"success": True, "message": "Records updated"}), 200
+    except APIError as e:
+        # preserve real error
+        raise e
+
+    except Exception:
+        raise APIError("Failed to save attendance", status_code=500)
+
+    #  SUCCESS PATH — NO EXCEPTION AFTER THIS
+    return jsonify({
+        "success": True,
+        "message": "Attendance saved successfully"
+    }), 200
 
 
 @teacher_bp.route("/attendance/summary", methods=["GET"])
@@ -370,6 +413,57 @@ def teacher_attendance_summary():
             "defaulters": defaulters[:10],
         }
     }), 200
+
+
+# @teacher_bp.route("/attendance/summary/today", methods=["GET"])
+# @role_required("TEACHER")
+# def teacher_attendance_summary_today():
+#     teacher = _get_current_teacher()
+#     today = datetime.utcnow().date() 
+
+#     teacher_class_ids = (
+#         db.session.query(TeacherClass.class_id)
+#         .filter(TeacherClass.teacher_id == teacher.id)
+#         .scalar_subquery()
+#     )
+
+#     today_sessions = (
+#         db.session.query(AttendanceSession.id)
+#         .filter(
+#             AttendanceSession.teacher_id == teacher.id,
+#             AttendanceSession.class_id.in_(teacher_class_ids),
+#             AttendanceSession.session_date == today
+#         )
+#         .scalar_subquery()
+#     )
+
+#     present = (
+#         db.session.query(func.count(AttendanceRecord.id))
+#         .filter(
+#             AttendanceRecord.session_id.in_(today_sessions),
+#             AttendanceRecord.status == "PRESENT"
+#         )
+#         .scalar()
+#         or 0
+#     )
+
+#     absent = (
+#         db.session.query(func.count(AttendanceRecord.id))
+#         .filter(
+#             AttendanceRecord.session_id.in_(today_sessions),
+#             AttendanceRecord.status == "ABSENT"
+#         )
+#         .scalar()
+#         or 0
+#     )
+
+#     return jsonify({
+#         "success": True,
+#         "data": {
+#             "present_count": present,
+#             "absent_count": absent
+#         }
+#     }), 200
 
 
 @teacher_bp.route("/sessions/existing", methods=["GET"])

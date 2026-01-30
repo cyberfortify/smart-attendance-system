@@ -26,6 +26,8 @@ export default function ManageTeachers() {
   const [importErrors, setImportErrors] = useState(null);
 
   const glassCard = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
+  const glassCard2 = "rounded-2xl bg-white border border-white";
+
 
   async function load() {
     setIsLoading(true);
@@ -45,7 +47,6 @@ export default function ManageTeachers() {
       setIsLoading(false);
     }
   }
-
 
   useEffect(() => {
     if (teachers.length === 0) {
@@ -174,7 +175,11 @@ export default function ManageTeachers() {
     totalTeachers: teachers.length,
     activeAssignments: mappings.length,
     availableClasses: classes.length,
-    unassignedTeachers: teachers.filter(t => !mappings.some(m => m.teacher_id === t.user_id)).length
+    unassignedTeachers: teachers.filter(
+      t =>
+        !t.teacher_profile_id ||
+        !mappings.some(m => m.teacher_id === t.teacher_profile_id)
+    ).length
   };
 
   const filteredTeachers = teachers
@@ -415,7 +420,7 @@ export default function ManageTeachers() {
           )}
 
           {activeTab === "assignments" && (
-            <div className={`${glassCard} overflow-hidden h-[calc(100vh-300px)]`}>
+            <div className={`${glassCard} overflow-auto h-[calc(100vh-300px)]`}>
               <div className="p-4 border-b border-slate-200/60 flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">Class Assignments</h2>
@@ -508,7 +513,7 @@ export default function ManageTeachers() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Password <span className="text-slate-500 text-xs ml-1">(leave blank for auto-generate)</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Password <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"><Key className="w-4 h-4" /></div>
                     <input type={showPassword ? "text" : "password"} placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 bg-white/80 text-slate-900 outline-none text-sm" />
@@ -526,9 +531,13 @@ export default function ManageTeachers() {
               </div>
 
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200/60">
-                <div className="text-sm text-slate-600"><span className="text-red-400">*</span> Required fields</div>
-                <button onClick={createTeacher} disabled={isLoading || !form.name || !form.email || !form.employee_id} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm ${isLoading || !form.name || !form.email || !form.employee_id ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-sm"}`}>
-                  {isLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <UserPlus className="w-4 h-4" />} {isLoading ? "Creating..." : "Create Teacher"}
+
+                <button
+                  onClick={createTeacher}
+                  disabled={isLoading || !form.name || !form.email || !form.employee_id}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm ${isLoading || !form.name || !form.email || !form.employee_id ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-sm"}`}>
+                  {isLoading ?
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <UserPlus className="w-4 h-4" />} {isLoading ? "Creating..." : "Create Teacher"}
                 </button>
               </div>
             </div>
@@ -541,7 +550,7 @@ export default function ManageTeachers() {
             <h3 className="font-semibold text-base text-slate-900 mb-3">Quick Actions</h3>
             <div className="space-y-2.5">
               {/* onClick={() => fileInputRef.current?.click()} */}
-              <button  className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+              <button className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-blue-50 rounded-lg border border-blue-100"><Upload className="w-4 h-4 text-blue-600" /></div>
                 <div>
                   <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
@@ -551,7 +560,7 @@ export default function ManageTeachers() {
 
 
               {/* onClick={exportCSV} */}
-              <button  className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+              <button className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-green-50 rounded-lg border border-green-100"><Download className="w-4 h-4 text-green-600" /></div>
                 <div>
                   <div className="font-medium text-slate-900 text-sm">Export Teachers</div>
@@ -588,7 +597,7 @@ export default function ManageTeachers() {
       {/* Assign Class Modal */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`${glassCard} p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto`}>
+          <div className={`${glassCard2} p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Assign Class to Teacher</h2>

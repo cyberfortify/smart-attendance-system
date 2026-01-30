@@ -154,10 +154,10 @@ export default function Home() {
                                         Get Started
                                         <ChevronRight className="w-4 h-4" />
                                     </Link>
-                                    <button className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-white text-slate-700 text-sm font-medium border border-slate-200 hover:bg-slate-50">
+                                    {/* <button className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-white text-slate-700 text-sm font-medium border border-slate-200 hover:bg-slate-50">
                                         <Play className="w-4 h-4" />
                                         Watch how it works
-                                    </button>
+                                    </button> */}
                                 </div>
 
                                 <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-slate-500">
@@ -323,9 +323,6 @@ export default function Home() {
                                     </li>
                                 ))}
                             </ul>
-                            <button className="px-5 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-medium text-sm sm:text-base">
-                                Explore Analytics
-                            </button>
                         </div>
 
                         <div className="relative mt-4 lg:mt-0">

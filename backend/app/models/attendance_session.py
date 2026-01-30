@@ -8,6 +8,15 @@ from ..extensions import db
 class AttendanceSession(db.Model):
     __tablename__ = "attendance_sessions"
 
+    __table_args__ = (
+        db.UniqueConstraint(
+            "class_id",
+            "session_date",
+            name="uq_attendance_class_date"
+        ),
+    )
+
+
     id = db.Column(db.Integer, primary_key=True)
     class_id = db.Column(db.Integer, db.ForeignKey("classes.id"))
     teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"))

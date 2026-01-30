@@ -42,8 +42,8 @@ export default function StudentDashboard() {
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
     { key: "attendance", label: "My Attendance", icon: <ClipboardList className="w-4 h-4" /> },
-    { key: "trends", label: "Trends", icon: <TrendingUp className="w-4 h-4" /> },
-    { key: "schedule", label: "Schedule", icon: <Calendar className="w-4 h-4" /> },
+    { key: "trends", label: "Trends", icon: <TrendingUp className="w-4 h-4" /> }
+    // { key: "schedule", label: "Schedule", icon: <Calendar className="w-4 h-4" /> },
   ];
 
   // Load analytics (summary + series + yearly)
@@ -172,7 +172,7 @@ export default function StudentDashboard() {
                     onClick={() => {
                       setActiveTab(item.key);
 
-                      // ✅ Mobile pe sidebar auto-close
+                      // Mobile pe sidebar auto-close
                       if (window.innerWidth < 1024) {
                         setIsSidebarOpen(false);
                       }
@@ -527,7 +527,7 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* SCHEDULE TAB (placeholder) */}
+            {/* SCHEDULE TAB (placeholder)
             {activeTab === "schedule" && (
               <div className={`${glassCard} p-4 sm:p-6 min-h-[320px] sm:min-h-[400px]`}>
                 <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">
@@ -544,7 +544,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-            )}
+            )} */}
           </main>
         </div>
       </div>

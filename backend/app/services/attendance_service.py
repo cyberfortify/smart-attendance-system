@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional
-from unittest import case
-from sqlalchemy import asc, func
+from sqlalchemy import asc, func, case
 from ..extensions import db
 from ..models.teacher import Teacher
 from ..models.teacher_classes import TeacherClass
@@ -10,7 +9,6 @@ from ..models.attendance_session import AttendanceSession
 from ..models.attendance_record import AttendanceRecord
 from ..utils.errors import APIError
 from datetime import date, timedelta 
-
 
 def is_teacher_assigned(teacher_id: int, class_id: int) -> bool:
     """Return True if teacher_id is assigned to class_id."""
@@ -134,8 +132,12 @@ def create_session(class_id: int, teacher_id: int, session_date: str) -> Attenda
     if not is_teacher_assigned(teacher_id, class_id):
         raise APIError("Forbidden: teacher not assigned to this class", status_code=403)
 
-    # optionally prevent duplicate sessions for same class+date
-    existing = AttendanceSession.query.filter_by(class_id=class_id, session_date=session_date).first()
+    # correct logic
+    existing = AttendanceSession.query.filter_by(
+        class_id=class_id,
+        session_date=session_date
+    ).first()
+
     if existing:
         # If you prefer to allow multiple sessions per day, remove this check.
         raise APIError("Session for this class and date already exists", status_code=409)
@@ -209,30 +211,26 @@ def get_session_with_records(session_id: int) -> Optional[Dict[str, Any]]:
     }
 
 def save_records(session_id: int, records: list):
-    """
-    Replace attendance records for a session.
-    """
+    session = AttendanceSession.query.get(session_id)
+    if not session:
+        raise APIError("Attendance session not found", status_code=404)
+
     try:
-        # Ensure session exists
-        session = AttendanceSession.query.get(session_id)
-        if not session:
-            raise APIError("Attendance session not found", status_code=404)
+        # SAFEST WAY: use session-level delete
+        db.session.query(AttendanceRecord)\
+            .filter(AttendanceRecord.session_id == session_id)\
+            .delete(synchronize_session=False)
 
-        # Delete old records first
-        AttendanceRecord.query.filter_by(session_id=session_id).delete()
-
-        # Insert new records
-        objs = []
-        for rec in records:
-            obj = AttendanceRecord(
+        db.session.add_all([
+            AttendanceRecord(
                 session_id=session_id,
-                student_id=rec["student_id"],
-                status=rec["status"],
-                remarks=rec.get("remarks"),
+                student_id=r["student_id"],
+                status=r["status"],
+                remarks=r.get("remarks")
             )
-            objs.append(obj)
+            for r in records
+        ])
 
-        db.session.add_all(objs)
         db.session.commit()
 
     except Exception as e:
@@ -392,7 +390,6 @@ def get_student_daily_attendance(student_id: int, days: int = 7):
             }
         )
     return series
-
 
 def get_student_weekly_attendance(student_id: int, weeks: int = 8):
     today = date.today()

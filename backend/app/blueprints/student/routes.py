@@ -31,32 +31,32 @@ def my_attendance():
     if not student:
         return jsonify({"success": False, "error": "Student not found"}), 404
 
-    # YOUR EXISTING DATA (tejas: 2 Present, 1 Absent)
+    summary = get_student_attendance(student.id)
+
     return jsonify({
         "success": True,
-        "data": {
-            "total_sessions": 3,
-            "present": 2,
-            "absent": 1,
-            "percentage": 66.7,
-            "student_id": student.id,
-            "class_id": student.class_id
-        }
+        "data": summary
     })
 
 @student_bp.route("/me/graphs", methods=["GET"])
 @role_required("STUDENT")
 def my_graphs():
+    user_id = int(get_jwt_identity())
+    student = Student.query.filter_by(user_id=user_id).first()
+    if not student:
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    year = date.today().year
+    monthly = get_student_monthly_attendance(student.id, year)
+
     return jsonify({
         "success": True,
         "data": {
-            "monthly": [
-                {"month": 1, "percentage": 66.7},
-                {"month": 2, "percentage": 100.0}
-            ],
-            "class_name": "Class 3"
+            "monthly": monthly,
+            "class_name": f"Class {student.class_id}"
         }
     })
+
 
 @student_bp.route("/me/analytics", methods=["GET"])
 @role_required("STUDENT")

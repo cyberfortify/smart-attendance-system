@@ -79,9 +79,71 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
     setConfirmOpen(true);
   }
 
+  // async function handleConfirm() {
+  //   setConfirmOpen(false);
+  //   setLoading(true);
+
+  //   try {
+  //     const records = Object.keys(values).map((k) => ({
+  //       student_id: Number(k),
+  //       status: values[k],
+  //     }));
+
+  //     if (records.length === 0) {
+  //       setToast({ message: "No attendance data to save", variant: "error" });
+  //       setLoading(false);
+  //       return;
+  //     }
+
+  //     let sessionId;
+
+  //     try {
+  //       // 1️ Try to create session
+  //       const res = await api.post("/teacher/sessions", {
+  //         class_id: Number(classId),
+  //         session_date: date,
+  //       });
+  //       sessionId = res.data.data.session_id;
+  //     } catch (err) {
+  //       // 2️ If already exists (409), reuse existing session
+  //       if (err.response?.status === 409) {
+  //         const year = new Date(date).getFullYear();
+  //         const sessionsRes = await api.get("/teacher/sessions", {
+  //           params: { class_id: Number(classId), year },
+  //         });
+
+  //         const existing = sessionsRes.data.data.find(
+  //           (s) => s.session_date === date
+  //         );
+
+  //         if (!existing) {
+  //           throw err;
+  //         }
+  //         sessionId = existing.id;
+  //       } else {
+  //         throw err;
+  //       }
+  //     }
+
+
+  //     // 3️ Save attendance records
+  //     await api.put(`/teacher/sessions/${sessionId}/records`, records);
+
+  //     showToast("Attendance saved successfully", "success");
+  //     onDone && onDone();
+
+  //   } catch (err) {
+  //     showToast("Failed to save attendance", "error");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }
+
   async function handleConfirm() {
     setConfirmOpen(false);
     setLoading(true);
+
+    let sessionId = null;
 
     try {
       const records = Object.keys(values).map((k) => ({
@@ -90,58 +152,69 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
       }));
 
       if (records.length === 0) {
-        setToast({ message: "No attendance data to save", variant: "error" });
-        setLoading(false);
+        showToast("No attendance data to save", "error");
         return;
       }
 
-      let sessionId;
-
+      // 🔹 STEP 1: Ensure session (NO TOAST HERE)
       try {
-        // 1️ Try to create session
         const res = await api.post("/teacher/sessions", {
           class_id: Number(classId),
           session_date: date,
         });
         sessionId = res.data.data.session_id;
+
       } catch (err) {
-        // 2️ If already exists (409), reuse existing session
         if (err.response?.status === 409) {
+          // ✅ SESSION EXISTS — get it
           const year = new Date(date).getFullYear();
+
           const sessionsRes = await api.get("/teacher/sessions", {
-            params: { class_id: Number(classId), year },
+            params: {
+              class_id: Number(classId),
+              year: Number(year),
+            },
           });
 
           const existing = sessionsRes.data.data.find(
-            (s) => s.session_date === date
+            (s) =>
+              s.session_date === date &&
+              s.class_id === Number(classId)
           );
 
+
           if (!existing) {
-            throw err;
+            throw new Error("Session exists but not found");
           }
+
           sessionId = existing.id;
         } else {
           throw err;
         }
       }
-      // 3️ Save attendance records
-      await api.put(`/teacher/sessions/${sessionId}/records`, records);
 
-      showToast("Attendance saved successfully", "success");
-      setTimeout(() => {
+      // 🔹 STEP 2: SAVE ATTENDANCE (ONLY THIS DECIDES SUCCESS)
+      const res = await api.put(`/teacher/sessions/${sessionId}/records`, records);
+
+      // treat 200–299 as success
+      if (res.status >= 200 && res.status < 300) {
+        showToast("Attendance saved successfully", "success");
         onDone && onDone();
-      }, 600);
+      }
+
+      onDone && onDone();
 
     } catch (err) {
+      console.error("Attendance error:", err);
       showToast(
-        err.response?.data?.error || "Failed to save attendance",
+        err?.response?.data?.error || "Failed to save attendance",
         "error"
       );
-
     } finally {
       setLoading(false);
     }
   }
+
 
   return (
     <div className={glassCard + " p-4 sm:p-6"}>
