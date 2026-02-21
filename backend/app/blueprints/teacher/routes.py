@@ -371,46 +371,11 @@ def teacher_attendance_summary():
         or 0
     )
 
-    records_q = (
-        db.session.query(
-            Student.id.label("student_id"),
-            Student.user_id.label("user_id"),
-            SchoolClass.name.label("class_name"),
-            SchoolClass.section.label("section"),
-            func.count(AttendanceRecord.id).label("total"),
-            func.sum(
-                case(
-                    (AttendanceRecord.status == "PRESENT", 1),
-                    else_=0
-                )
-            ).label("present")
-        )
-        .join(AttendanceSession, AttendanceRecord.session_id == AttendanceSession.id)
-        .join(Student, AttendanceRecord.student_id == Student.id)
-        .join(SchoolClass, Student.class_id == SchoolClass.id)
-        .filter(AttendanceSession.class_id.in_(teacher_class_ids))
-        .group_by(Student.id, Student.user_id, SchoolClass.name, SchoolClass.section)
-    )
-
-    defaulters = []
-    for row in records_q:
-        if row.total == 0:
-            continue
-        rate = round(row.present * 100 / row.total)
-        defaulters.append({
-            "student_id": row.student_id,
-            "class_name": f"{row.class_name}{' - ' + row.section if row.section else ''}",
-            "attendance_rate": rate,
-        })
-
-    defaulters.sort(key=lambda d: d["attendance_rate"])
-
     return jsonify({
         "success": True,
         "data": {
             "present_count": present_count,
             "absent_count": absent_count,
-            "defaulters": defaulters[:10],
         }
     }), 200
 

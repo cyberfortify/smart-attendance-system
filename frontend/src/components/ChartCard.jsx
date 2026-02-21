@@ -34,7 +34,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         data,
         backgroundColor:
           type === "pie"
-            ? ["#10b981", "#ef4444", "#3b82f6", "#f59e0b"] // Better colors
+            ? ["#10b981", "#ef4444", "#f59e0b"] // Better colors
             : "rgba(99,102,241,0.6)", // Slightly more opaque
         borderColor:
           type === "pie"

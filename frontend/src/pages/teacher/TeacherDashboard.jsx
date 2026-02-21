@@ -19,6 +19,43 @@ import ChartCard from "../../components/ChartCard";
 import TakeAttendanceSection from "./TakeAttendanceSection";
 import Toast from "../../components/Toast";
 
+const STATIC_DEFAULTERS = [
+  // 🔴 Critical (<60%)
+  { student_id: 1, name: "Tejas Kumar", roll: "57", percent: 52, presents: 13, total_sessions: 25 },
+  { student_id: 2, name: "Anish Sharma", roll: "12", percent: 48, presents: 12, total_sessions: 25 },
+  { student_id: 3, name: "Aman Verma", roll: "26", percent: 55, presents: 14, total_sessions: 25 },
+  { student_id: 4, name: "Neha Mishra", roll: "74", percent: 58, presents: 14, total_sessions: 24 },
+
+  // 🟠 At Risk (60–69%)
+  { student_id: 5, name: "Riya Patel", roll: "43", percent: 60, presents: 18, total_sessions: 30 },
+  { student_id: 6, name: "Rahul Yadav", roll: "39", percent: 64, presents: 19, total_sessions: 30 },
+  { student_id: 7, name: "Sahil Khan", roll: "14", percent: 66, presents: 16, total_sessions: 24 },
+  { student_id: 8, name: "Aditi Joshi", roll: "82", percent: 68, presents: 19, total_sessions: 28 },
+  { student_id: 9, name: "Ishita Banerjee", roll: "63", percent: 69, presents: 20, total_sessions: 29 },
+
+  // 🟡 Borderline (70–74%)
+  { student_id: 10, name: "Vikram Singh", roll: "08", percent: 70, presents: 21, total_sessions: 30 },
+  { student_id: 11, name: "Pooja Nair", roll: "05", percent: 71, presents: 17, total_sessions: 24 },
+  { student_id: 12, name: "Rohit Malhotra", roll: "31", percent: 72, presents: 18, total_sessions: 25 },
+  { student_id: 13, name: "Kavya Iyer", roll: "59", percent: 73, presents: 21, total_sessions: 29 },
+  { student_id: 14, name: "Sneha Gupta", roll: "91", percent: 74, presents: 19, total_sessions: 26 },
+
+  // 🔴 More critical to balance charts
+  { student_id: 15, name: "Nikhil Chauhan", roll: "22", percent: 50, presents: 12, total_sessions: 24 },
+  { student_id: 16, name: "Arjun Reddy", roll: "47", percent: 56, presents: 14, total_sessions: 25 },
+
+  // 🟠 Extra risk
+  { student_id: 17, name: "Kunal Mehta", roll: "68", percent: 65, presents: 19, total_sessions: 29 },
+  { student_id: 18, name: "Mohit Agarwal", roll: "11", percent: 67, presents: 20, total_sessions: 30 },
+
+  // 🟡 Near threshold
+  { student_id: 19, name: "Simran Kaur", roll: "90", percent: 74, presents: 20, total_sessions: 27 },
+  { student_id: 20, name: "Tanvi Kulkarni", roll: "76", percent: 73, presents: 22, total_sessions: 30 },
+];
+
+
+
+
 export default function TeacherDashboard() {
   const user = getUser();
   const navigate = useNavigate();
@@ -27,10 +64,30 @@ export default function TeacherDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
-  const [defaulters, setDefaulters] = useState([]);
-  const [defaulterClassId, setDefaulterClassId] = useState("");
-  const [defaulterLoading, setDefaulterLoading] = useState(false);
   const refreshDashboard = () => loadDashboard();
+  const [defaulters] = useState(STATIC_DEFAULTERS);
+  const [defaulterLoading] = useState(false);
+  const [defaulterClassId, setDefaulterClassId] = useState("");
+  const topDefaulters = [...defaulters]
+    .sort((a, b) => a.percent - b.percent)
+    .slice(0, 10);
+
+  const defaulterLabels = topDefaulters.map(d => d.name);
+  const defaulterValues = topDefaulters.map(d => d.percent);
+  const criticalCount = defaulters.filter(d => d.percent < 60).length;
+  const riskCount = defaulters.filter(d => d.percent >= 60 && d.percent < 70).length;
+  const borderlineCount = defaulters.filter(d => d.percent >= 70 && d.percent < 75).length;
+
+  const riskLabels = ["Critical (<60%)", "At Risk (60–69%)", "Borderline (70–74%)"];
+  const riskValues = [criticalCount, riskCount, borderlineCount];
+  const sessionLabels = defaulters.map(d => d.name);
+  const presentValues = defaulters.map(d => d.presents);
+  const sessionValues = defaulters.map(d => d.total_sessions);
+
+
+
+
+
 
   const glassCard =
     "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
@@ -52,12 +109,21 @@ export default function TeacherDashboard() {
   });
   const [loadingStats, setLoadingStats] = useState(true);
 
-  // summary + defaulters + pie data
-  const [summary, setSummary] = useState({
-    presentCount: 0,
-    absentCount: 0,
-  });
+  const statCards = [
+    { label: "Total Students", value: stats.totalStudents },
+    { label: "Today's Attendance", value: `${stats.todayAttendance}%` },
+    { label: "Pending Tasks", value: stats.pendingTasks },
+    { label: "Upcoming Classes", value: stats.upcomingClasses },
+  ];
 
+
+  // useEffect(() => {
+  //   if (classes.length > 0 && !defaulterClassId) {
+  //     setDefaulterClassId(classes[0].id);
+  //   }
+  // }, [classes]);
+
+  // Load classes on mount
   useEffect(() => {
     async function loadClasses() {
       try {
@@ -73,9 +139,27 @@ export default function TeacherDashboard() {
     loadClasses();
   }, []);
 
+  useEffect(() => {
+    // Load sirf jab classes available ho
+    if (classes.length > 0) {
+      loadDashboard();
+    }
+  }, [classes]);
+
+
+  // summary 
+  const [summary, setSummary] = useState({
+    presentCount: 0,
+    absentCount: 0,
+  });
+
+  function logout() {
+    clearAuth();
+    navigate("/login");
+  }
+
   async function loadDashboard() {
     try {
-      setDefaulterLoading(true);
       setLoadingStats(true);
 
       // 1. Dashboard stats (API only)
@@ -106,48 +190,38 @@ export default function TeacherDashboard() {
         // No fallback - 0 values
       }
 
-      //  3. Defaulters (API only - tumhara route)
-      if (classes.length > 0) {
-        try {
-          const defaulterRes = await api.get("/reports/defaulters", {
-            params: {
-              class_id: classes[0].id,
-              threshold: 75
-            }
-          });
-          setDefaulters(defaulterRes.data?.data || []);
-        } catch (defErr) {
-          console.warn("Defaulters API unavailable:", defErr.response?.status);
-          setDefaulters([]);  // Empty array only
-        }
-      }
-
     } catch (err) {
       console.error("Dashboard error:", err);
     } finally {
       setLoadingStats(false);
-      setDefaulterLoading(false);
     }
   }
-  useEffect(() => {
-    // Load sirf jab classes available ho
-    if (classes.length > 0) {
-      loadDashboard();
-    }
-  }, [classes]);
+
+  // useEffect(() => {
+  //   if (!defaulterClassId) return;
+
+  //   async function loadDefaulters() {
+  //     setDefaulterLoading(true);
+  //     try {
+  //       const res = await api.get("/reports/defaulters", {
+  //         params: {
+  //           class_id: defaulterClassId,
+  //           threshold: 75
+  //         }
+  //       });
+  //       setDefaulters(res.data?.data || []);
+  //     } catch (e) {
+  //       console.warn("Defaulters API unavailable", e.response?.status);
+  //       setDefaulters([]);
+  //     } finally {
+  //       setDefaulterLoading(false);
+  //     }
+  //   }
+
+  //   loadDefaulters();
+  // }, [defaulterClassId]);
 
 
-  const statCards = [
-    { label: "Total Students", value: stats.totalStudents },
-    { label: "Today's Attendance", value: `${stats.todayAttendance}%` },
-    { label: "Pending Tasks", value: stats.pendingTasks },
-    { label: "Upcoming Classes", value: stats.upcomingClasses },
-  ];
-
-  function logout() {
-    clearAuth();
-    navigate("/login");
-  }
 
   const totalRecords = summary.presentCount + summary.absentCount || 1;
   const presentPercent = Math.round((summary.presentCount * 100) / totalRecords);
@@ -344,6 +418,66 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
 
+
+                  {/* Top Defaulters (Static Preview) */}
+                  <div className={`${glassCard} p-4`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-semibold text-slate-900">
+                          Top Defaulters
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                          Preview
+                        </span>
+                      </div>
+
+                      {/* Disabled dropdown – static mode */}
+                      {/* <select
+                        disabled
+                        className="text-xs px-2 py-1 bg-white/50 rounded-lg border opacity-60 cursor-not-allowed"
+                      >
+                        <option>All Classes</option>
+                      </select> */}
+                    </div>
+
+                    {defaulters.length > 0 ? (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {defaulters.slice(0, 5).map((d) => (
+                          <div
+                            key={d.student_id}
+                            className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/60 border border-slate-100"
+                          >
+                            <div>
+                              <div className="text-xs font-semibold text-slate-900">
+                                {d.name}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                Roll: {d.roll}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs font-semibold text-rose-600">
+                                {d.percent}%
+                              </div>
+                              <div className="text-[10px] text-slate-500">
+                                {d.presents}/{d.total_sessions}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-32 text-center">
+                        <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
+                        <p className="text-xs text-slate-500">
+                          Defaulters preview not available
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+
+                  {/* Top Defaulters
                   <div className={`${glassCard} p-4`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="text-sm font-semibold text-slate-900">Top Defaulters</div>
@@ -384,7 +518,7 @@ export default function TeacherDashboard() {
                     ) : (
                       <p className="text-xs text-slate-500">No defaulters found</p>
                     )}
-                  </div>
+                  </div> */}
 
                 </div>
 
@@ -399,7 +533,7 @@ export default function TeacherDashboard() {
               </>
             )}
 
-            {/* OTHER TABS PLACEHOLDERS */}
+            {/* Attendance TAB  */}
             {activeTab === "attendance" && (
               <TakeAttendanceSection
                 glassCard={glassCard}
@@ -412,8 +546,204 @@ export default function TeacherDashboard() {
                   setToast({ message: msg, variant })
                 }
               />
+            )}
+
+            {/* Defaulters TAB */}
+            {activeTab === "defaulters" && (
+              <div className={`${glassCard} p-6 space-y-6`}>
+
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        Defaulters Report
+                      </h2>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                        Preview
+                      </span>
+                    </div>
+                    <p className="text-slate-600 text-sm">
+                      Static preview – attendance below 75%
+                    </p>
+                  </div>
+
+                  {/* Disabled Class Selector */}
+                  {/* <select
+                    disabled
+                    className="px-4 py-2 border border-slate-200 rounded-xl bg-white/60
+                   text-sm font-medium min-w-[180px] opacity-60 cursor-not-allowed"
+                  >
+                    <option>All Classes</option>
+                  </select> */}
+                </div>
+
+                {/* Table (Fixed height + scroll) */}
+                <div className="relative overflow-x-auto">
+                  <div className="max-h-[420px] overflow-y-auto rounded-2xl">
+                    <table className="w-full bg-white/60 backdrop-blur-sm border border-slate-200">
+                      <thead className="sticky top-0 bg-white/80 backdrop-blur-md z-10">
+                        <tr className="border-b border-slate-200">
+                          <th className="text-left p-4 font-semibold text-slate-800">Student</th>
+                          <th className="text-left p-4 font-semibold text-slate-800">Roll</th>
+                          <th className="text-right p-4 font-semibold text-slate-800">Attendance</th>
+                          <th className="text-right p-4 font-semibold text-slate-800">Sessions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {defaulters.length > 0 ? (
+                          defaulters.map((d) => (
+                            <tr
+                              key={d.student_id}
+                              className="hover:bg-white/80 transition-colors border-b border-slate-100 last:border-b-0"
+                            >
+                              <td className="p-4 font-medium text-slate-900">{d.name}</td>
+                              <td className="p-4 text-sm text-slate-600">{d.roll}</td>
+                              <td className="p-4 text-right">
+                                <span className="text-rose-600 font-bold text-lg">
+                                  {d.percent}%
+                                </span>
+                              </td>
+                              <td className="p-4 text-right text-sm text-slate-600">
+                                {d.presents}/{d.total_sessions}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="p-12 text-center text-slate-500">
+                              <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-amber-400" />
+                              <div className="text-lg font-semibold mb-1">
+                                Defaulters Preview Not Available
+                              </div>
+                              <p className="text-sm">
+                                This report will be enabled in a future update
+                              </p>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
 
+                {/* Attendance % Graph (Static Preview) */}
+                <div className={`${glassCard} p-6`}>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Top 10 Defaulters Attendance Overview
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      Attendance percentage of students below threshold
+                    </p>
+                  </div>
+
+                  {defaulters.length > 0 ? (
+                    <ChartCard
+                      type="bar"
+                      title=""
+                      labels={defaulterLabels}
+                      data={defaulterValues}
+                      height={320}
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No data available for visualization
+                    </p>
+                  )}
+                </div>
+
+                {/* Risk Analysis Charts (Side by Side) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* Pie Chart */}
+                  <div className={`${glassCard} p-6`}>
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Attendance Risk Distribution
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        Breakdown of defaulters by risk level
+                      </p>
+                    </div>
+
+                    {defaulters.length > 0 ? (
+                      <ChartCard
+                        type="pie"
+                        title=""
+                        labels={riskLabels}
+                        data={riskValues}
+                        height={260}
+                      />
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No data available for visualization
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Bar Chart */}
+                  <div className={`${glassCard} p-6`}>
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Risk Level Comparison
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        Number of students in each risk category
+                      </p>
+                    </div>
+
+                    {defaulters.length > 0 ? (
+                      <ChartCard
+                        type="bar"
+                        title=""
+                        labels={riskLabels}
+                        data={riskValues}
+                        height={260}
+                      />
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No data available for visualization
+                      </p>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Sessions vs Presents Trend (Static Preview) */}
+                <div className={`${glassCard} p-6`}>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Attendance Consistency Trend
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      Comparison of attended sessions vs total sessions
+                    </p>
+                  </div>
+
+                  {defaulters.length > 0 ? (
+                    <ChartCard
+                      type="line"
+                      title=""
+                      labels={sessionLabels}
+                      data={presentValues}
+                      height={320}
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No data available for visualization
+                    </p>
+                  )}
+                </div>
+
+
+
+                {/* CSV Export – Disabled */}
+                {/* <div className="pt-4 border-t border-slate-200 text-sm text-slate-500">
+                  CSV export will be available when defaulters module is enabled.
+                </div> */}
+              </div>
             )}
             {/* {activeTab === "students" && (
               <div className={glassCard + " p-4"}>
@@ -425,86 +755,16 @@ export default function TeacherDashboard() {
                 Assignments UI will come here.
               </div>
             )} */}
-            {activeTab === "defaulters" && (
-              <div className={`${glassCard} p-6 space-y-6`}>
-                {/* Header + Class Selector */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Defaulters Report</h2>
-                    <p className="text-slate-600 text-sm">Attendance below 75%</p>
-                  </div>
 
-                  {/* Class Selector */}
-                  <select
-                    value={defaulterClassId}
-                    onChange={(e) => setDefaulterClassId(Number(e.target.value))}
-                    className="px-4 py-2 border border-slate-200 rounded-xl bg-white shadow-sm text-sm font-medium min-w-[180px]"
-                  >
-                    <option value="">All Classes</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.section ? `(${c.section})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                {/* Full table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200">
-                    <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="text-left p-4 font-semibold text-slate-800">Student</th>
-                        <th className="text-left p-4 font-semibold text-slate-800">Roll</th>
-                        <th className="text-right p-4 font-semibold text-slate-800">Attendance</th>
-                        <th className="text-right p-4 font-semibold text-slate-800">Sessions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {defaulters.length > 0 ? (
-                        defaulters.map((d, i) => (
-                          <tr key={d.student_id || i} className="hover:bg-white/80 transition-colors border-b border-slate-100 last:border-b-0">
-                            <td className="p-4 font-medium text-slate-900">{d.name}</td>
-                            <td className="p-4 text-sm text-slate-600">{d.roll || "N/A"}</td>
-                            <td className="p-4 text-right">
-                              <span className="text-rose-600 font-bold text-lg">{d.percent}%</span>
-                            </td>
-                            <td className="p-4 text-right text-sm text-slate-600">
-                              {d.presents}/{d.total_sessions}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="p-12 text-center text-slate-500">
-                            <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-amber-400" />
-                            <div className="text-lg font-semibold mb-1">No Defaulters Found</div>
-                            <p className="text-sm">All students maintaining good attendance</p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* CSV Export */}
-                {defaulters.length > 0 && defaulterClassId && (
-                  <div className="pt-4 border-t border-slate-200">
-                    <a
-                      href={`/reports/defaulters.csv?class_id=${defaulterClassId}`}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-semibold shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-200"
-                    >
-                      📥 Download CSV ({defaulters.length} students)
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
             {/* {activeTab === "schedule" && (
               <div className={glassCard + " p-4"}>
                 Schedule UI will come here.
               </div>
             )} */}
+
+
+
           </main>
         </div>
       </div>

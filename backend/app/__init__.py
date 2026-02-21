@@ -46,7 +46,7 @@ def create_app(config_name: str = "default"):
     app.register_blueprint(student_bp, url_prefix="/api/student")
 
     from .blueprints.reports.routes import reports_bp
-    app.register_blueprint(reports_bp, url_prefix="/api/reports")
+    app.register_blueprint(reports_bp)
 
     from .utils.errors import APIError, handle_api_error, handle_generic_exception
     app.register_error_handler(APIError, lambda e: handle_api_error(e))
