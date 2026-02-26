@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("teacher1@gmail.com");
+  const [password, setPassword] = useState("teacher123");
   const [showPassword, setShowPassword] = useState(false);
   // const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");

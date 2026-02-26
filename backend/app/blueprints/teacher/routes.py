@@ -18,6 +18,7 @@ from ...models.student import Student
 from ...models.attendance_session import AttendanceSession
 from ...models.attendance_record import AttendanceRecord
 from ...models.teacher_attendance import TeacherAttendance
+from ...models.academic_assignment import AcademicAssignment
 from ...services.attendance_service import (
     get_students_by_class,
     is_teacher_assigned,
@@ -98,13 +99,23 @@ def _get_current_teacher():
         raise APIError("Teacher profile not found", status_code=404)
     return teacher
 
-
+# Ye API teacher ko apne aap ki attendance mark karne degi using face recognition. Admin ne pehle se face register karwaya hoga, tabhi ye chalega. Teacher apni image bhejega, system usko verify karega aur attendance mark karega.
 @teacher_bp.route("/self-attendance", methods=["POST"])
 @role_required("TEACHER")
-def mark_self_attendance():
+def teacher_self_attendance():
 
-    teacher = _get_current_teacher()
-    today = date.today()
+    teacher = Teacher.query.filter_by(user_id=get_jwt_identity()).first()
+
+    if not teacher:
+        return jsonify({"error": "Teacher profile not found"}), 404
+
+    if not teacher.face_embedding:
+        return jsonify({"error": "Face not registered by admin"}), 400
+
+    if "image" not in request.files:
+        return jsonify({"error": "Image required"}), 400
+
+    today = datetime.utcnow().date()
 
     existing = TeacherAttendance.query.filter_by(
         teacher_id=teacher.id,
@@ -112,19 +123,161 @@ def mark_self_attendance():
     ).first()
 
     if existing:
-        return jsonify({"success": False, "message": "Already marked today"}), 200
+        return jsonify({"message": "Attendance already marked"}), 200
 
-    record = TeacherAttendance(
-        teacher_id=teacher.id,
-        attendance_date=today,
-        status="PRESENT",
-        method="FACE"
-    )
+    try:
+        file = request.files["image"]
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    db.session.add(record)
-    db.session.commit()
+        embedding = DeepFace.represent(
+            img_path=image,
+            model_name="ArcFace",
+            enforce_detection=False
+        )[0]["embedding"]
 
-    return jsonify({"success": True, "message": "Attendance marked"})
+        stored_embedding = np.array(json.loads(teacher.face_embedding))
+        captured_embedding = np.array(embedding)
+
+        from scipy.spatial.distance import cosine
+        distance = cosine(stored_embedding, captured_embedding)
+
+        if distance > 0.6:
+            return jsonify({"success": False, "message": "Face not matched"}), 400
+
+        record = TeacherAttendance(
+            teacher_id=teacher.id,
+            attendance_date=today,
+            status="PRESENT",
+            method="FACE"
+        )
+
+        db.session.add(record)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Attendance marked"})
+
+    except Exception as e:
+        db.session.rollback()
+        print("Self attendance error:", e)
+        return jsonify({"error": "Attendance failed"}), 500
+
+
+@teacher_bp.route("/self-attendance-history", methods=["GET"])
+@role_required("TEACHER")
+def self_attendance_history():
+    teacher = _get_current_teacher()
+
+    records = TeacherAttendance.query.filter_by(
+        teacher_id=teacher.id
+    ).order_by(TeacherAttendance.attendance_date.desc()).all()
+
+    return jsonify({
+        "success": True,
+        "data": [
+            {
+                "attendance_date": r.attendance_date,
+                "status": r.status
+            }
+            for r in records
+        ]
+    })
+
+@teacher_bp.route("/self-attendance-summary", methods=["GET"])
+@role_required("TEACHER")
+def teacher_attendance_summary():
+    teacher = _get_current_teacher()
+
+    records = TeacherAttendance.query.filter_by(
+        teacher_id=teacher.id
+    ).all()
+
+    total = len(records)
+    present = sum(1 for r in records if r.status == "PRESENT")
+    absent = total - present
+
+    percentage = round((present / total) * 100, 2) if total > 0 else 0
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "total": total,
+            "present": present,
+            "absent": absent,
+            "percentage": percentage
+        }
+    })
+
+@teacher_bp.route("/self-attendance-monthly", methods=["GET"])
+@role_required("TEACHER")
+def teacher_monthly_attendance():
+
+    teacher = _get_current_teacher()
+
+    current_year = datetime.utcnow().year
+
+    rows = db.session.query(
+        func.extract("month", TeacherAttendance.attendance_date).label("month"),
+        func.sum(case((TeacherAttendance.status == "PRESENT", 1), else_=0)).label("present"),
+        func.count(TeacherAttendance.id).label("total")
+    ).filter(
+        TeacherAttendance.teacher_id == teacher.id,
+        func.extract("year", TeacherAttendance.attendance_date) == current_year
+    ).group_by("month").all()
+
+    data = []
+
+    for r in rows:
+        data.append({
+            "month": int(r.month),
+            "present": int(r.present),
+            "absent": int(r.total - r.present)
+        })
+
+    return jsonify({"success": True, "data": data})
+
+
+@teacher_bp.route("/self-attendance-by-month", methods=["GET"])
+@role_required("TEACHER")
+def teacher_self_attendance_by_month():
+    try:
+        teacher = _get_current_teacher()
+
+        if not teacher:
+            return jsonify({"success": False, "error": "Teacher not found"}), 404
+
+        month = request.args.get("month")
+        if not month:
+            return jsonify({"success": True, "data": []})
+
+        year, month_num = month.split("-")
+
+        start_date = date(int(year), int(month_num), 1)
+
+        if int(month_num) == 12:
+            end_date = date(int(year) + 1, 1, 1)
+        else:
+            end_date = date(int(year), int(month_num) + 1, 1)
+
+        records = TeacherAttendance.query.filter(
+            TeacherAttendance.teacher_id == teacher.id,
+            TeacherAttendance.attendance_date >= start_date,
+            TeacherAttendance.attendance_date < end_date
+        ).all()
+
+        result = [
+            {
+                "day": r.attendance_date.day,
+                "status": r.status
+            }
+            for r in records
+        ]
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        print("ERROR IN MONTH ROUTE:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @teacher_bp.route("/performance", methods=["GET"])
@@ -716,3 +869,72 @@ def finalize_face_attendance():
             )
 
     return jsonify({"success": True, "message": "Attendance finalized successfully"})
+
+
+@teacher_bp.route("/academic-assignments", methods=["POST"])
+@role_required("TEACHER")
+def create_academic_assignment():
+
+    teacher = _get_current_teacher()
+    data = request.get_json()
+
+    class_id = data.get("class_id")
+    subject_id = data.get("subject_id")
+    title = data.get("title")
+    description = data.get("description")
+    due_date = data.get("due_date")
+
+    if not all([class_id, subject_id, title, due_date]):
+        raise APIError("Missing required fields", 400)
+
+    # Verify teacher assigned to subject
+    assigned = TeacherSubjectAssignment.query.filter_by(
+        teacher_id=teacher.id,
+        class_id=class_id,
+        subject_id=subject_id
+    ).first()
+
+    if not assigned:
+        raise APIError("Not authorized for this subject", 403)
+
+    assignment = AcademicAssignment(
+        class_id=class_id,
+        subject_id=subject_id,
+        teacher_id=teacher.id,
+        title=title,
+        description=description,
+        due_date=datetime.strptime(due_date, "%Y-%m-%d").date()
+    )
+
+    db.session.add(assignment)
+    db.session.commit()
+
+    #  Notify students
+    students = Student.query.filter_by(class_id=class_id).all()
+
+    for student in students:
+        create_notification(
+            user_id=student.user_id,
+            title="New Assignment Posted",
+            message=f"{title} assigned. Due: {due_date}",
+            type="info"
+        )
+
+    return jsonify({"success": True, "message": "Assignment created"})
+
+
+@teacher_bp.route("/academic-assignments", methods=["GET"])
+@role_required("TEACHER")
+def list_academic_assignments():
+
+    teacher = _get_current_teacher()
+
+    assignments = AcademicAssignment.query.filter_by(
+        teacher_id=teacher.id
+    ).order_by(AcademicAssignment.created_at.desc()).all()
+
+    return jsonify({
+        "success": True,
+        "data": [a.to_dict() for a in assignments]
+    })
+

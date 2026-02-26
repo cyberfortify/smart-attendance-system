@@ -27,6 +27,7 @@ from ...models.teacher import Teacher
 from ...models.attendance_session import AttendanceSession
 from ...models.attendance_record import AttendanceRecord
 from ...models.notification import Notification
+from ...models.teacher_attendance import TeacherAttendance
 from ...services.auth_service import create_user
 from ...utils.decorators import role_required
 from ...utils.validators import validate_json
@@ -1300,3 +1301,51 @@ def list_teacher_subjects():
         )
 
     return jsonify({"success": True, "data": data})
+
+
+
+@admin_bp.route("/teachers/<int:teacher_id>/register-face", methods=["POST"])
+@role_required("ADMIN")
+def register_teacher_face(teacher_id):
+
+    teacher = Teacher.query.get(teacher_id)
+    if not teacher:
+        raise APIError("Teacher not found", 404)
+
+    if "image" not in request.files:
+        raise APIError("Image required", 400)
+
+    file = request.files["image"]
+
+    try:
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+        if image is None:
+            raise APIError("Invalid image", 400)
+
+        # Save face image
+        upload_dir = os.path.join("uploads", "faces")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        file_path = os.path.join(upload_dir, f"teacher_{teacher.id}.jpg")
+        cv2.imwrite(file_path, image)
+
+        # Generate embedding
+        embedding = DeepFace.represent(
+            img_path=file_path,
+            model_name="ArcFace",
+            enforce_detection=False
+        )[0]["embedding"]
+
+        teacher.face_embedding = json.dumps(embedding)
+        teacher.face_registered_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Teacher face registered successfully"})
+
+    except Exception as e:
+        db.session.rollback()
+        print("Teacher face registration error:", e)
+        raise APIError("Face registration failed", 500)

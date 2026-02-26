@@ -22,7 +22,9 @@ import api, {
 } from "../../api/axios";
 import ChartCard from "../../components/ChartCard";
 import TakeAttendanceSection from "./TakeAttendanceSection";
+import TeacherAcademicAssignments from "./TeacherAcademicAssignments";
 import Toast from "../../components/Toast";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 
 export default function TeacherDashboard() {
@@ -57,6 +59,16 @@ export default function TeacherDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [performance, setPerformance] = useState(null);
+  const [selfAttendanceHistory, setSelfAttendanceHistory] = useState([]);
+  const [markingLoading, setMarkingLoading] = useState(false);
+  const videoRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [monthlyChartData, setMonthlyChartData] = useState([]);
+  const [monthlySummary, setMonthlySummary] = useState([]);
+  const [heatmapData, setHeatmapData] = useState([]);
+
 
 
   const glassCard =
@@ -68,7 +80,8 @@ export default function TeacherDashboard() {
     // { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
     // { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
     { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> },
-    { key: "performance", label: "Performance", icon: <BarChart3 className="w-4 h-4" /> }
+    { key: "academicAssignments", label: "Academic Assignments", icon: <BookOpen /> },
+    { key: "myAttendance", label: "My Attendance", icon: <CalendarDays className="w-4 h-4" /> }
     // { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
   ];
 
@@ -86,6 +99,11 @@ export default function TeacherDashboard() {
     { label: "Pending Tasks", value: stats.pendingTasks },
     { label: "Upcoming Classes", value: stats.upcomingClasses },
   ];
+
+
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date().toISOString().slice(0, 7) // YYYY-MM
+  );
 
 
   async function loadNotifications() {
@@ -109,6 +127,55 @@ export default function TeacherDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  async function loadSelfAttendance() {
+    try {
+      const res = await api.get("/teacher/self-attendance-history");
+      setSelfAttendanceHistory(res.data.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadSummaryMonthly() {
+    try {
+      const res = await api.get("/teacher/self-attendance-monthly");
+      setMonthlyChartData(res.data.data || []);
+    } catch (err) {
+      console.error("Monthly chart error:", err);
+    }
+  }
+  async function loadMonthly() {
+    const res = await api.get("/teacher/self-attendance-by-month", {
+      params: { month: selectedMonth }
+    });
+    console.log("Heatmap Data:", res.data.data);
+    setMonthlyData(res.data.data || []);
+  }
+
+
+  async function loadHeatmap() {
+    const res = await api.get("/teacher/self-attendance-by-month", {
+      params: { month: selectedMonth }
+    });
+    setHeatmapData(res.data.data || []);
+  }
+  async function loadSummary() {
+    try {
+      const res = await api.get("/teacher/self-attendance-summary");
+      setAttendanceSummary(res.data.data);
+    } catch (err) {
+      console.error("Summary error:", err);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "myAttendance") {
+      loadSelfAttendance();
+      loadSummary();
+      loadSummaryMonthly();
+      loadHeatmap();
+    }
+  }, [activeTab, selectedMonth]);
 
   useEffect(() => {
     async function loadAssignments() {
@@ -284,6 +351,64 @@ export default function TeacherDashboard() {
   const sessionLabels = filteredDefaulters.map(d => d.name);
   const presentValues = filteredDefaulters.map(d => d.presents);
   const sessionValues = filteredDefaulters.map(d => d.total_sessions);
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access denied:", err);
+      setToast({ message: "Camera permission denied", variant: "error" });
+    }
+  }
+  function stopCamera() {
+    const video = videoRef.current;
+
+    if (video && video.srcObject) {
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      video.srcObject = null;   // VERY IMPORTANT
+    }
+  }
+  useEffect(() => {
+    return () => {
+      stopCamera();  // auto cleanup when component unmount
+    };
+  }, []);
+
+  async function captureSelfAttendance() {
+    setMarkingLoading(true);
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const blob = await new Promise(resolve =>
+      canvas.toBlob(resolve, "image/jpeg")
+    );
+
+    const formData = new FormData();
+    formData.append("image", blob);
+
+    try {
+      await api.post("/teacher/self-attendance", formData);
+      setToast({ message: "Attendance Marked!", variant: "success" });
+      loadSelfAttendance();
+    } catch {
+      setToast({ message: "Face not matched", variant: "error" });
+    }
+
+    stopCamera();
+    setShowCamera(false);
+    setMarkingLoading(false);
+  }
 
 
   return (
@@ -902,53 +1027,222 @@ export default function TeacherDashboard() {
             )}
 
 
+            {activeTab === "myAttendance" && (
+              <div className={`${glassCard} p-6 space-y-8`}>
 
-            {activeTab === "performance" && performance && (
-              <div className={`${glassCard} p-6 space-y-6`}>
-                <h2 className="text-xl font-bold">My Performance</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className={`${glassCard} p-4`}>
-                    <div className="text-sm text-slate-600">Sessions Taken</div>
-                    <div className="text-2xl font-bold">
-                      {performance.total_sessions_taken}
-                    </div>
+                {/* HEADER */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      My Attendance
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Track your personal attendance performance
+                    </p>
                   </div>
 
-                  <div className={`${glassCard} p-4`}>
-                    <div className="text-sm text-slate-600">Student Records</div>
-                    <div className="text-2xl font-bold">
-                      {performance.total_student_records}
+                  <button
+                    onClick={() => {
+                      setShowCamera(true);
+                      setTimeout(startCamera, 300);
+                    }}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-sm"
+                  >
+                    Mark Attendance (Face)
+                  </button>
+                </div>
+
+                {/* SUMMARY CARDS */}
+                {attendanceSummary && (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+                      <div className="p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
+                        <p className="text-xs text-indigo-600 font-medium">Total Days</p>
+                        <p className="text-3xl font-bold text-slate-900 mt-1">
+                          {attendanceSummary.total}
+                        </p>
+                      </div>
+
+                      <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
+                        <p className="text-xs text-emerald-600 font-medium">Present</p>
+                        <p className="text-3xl font-bold text-emerald-600 mt-1">
+                          {attendanceSummary.present}
+                        </p>
+                      </div>
+
+                      <div className="p-5 bg-rose-50 rounded-2xl border border-rose-100">
+                        <p className="text-xs text-rose-600 font-medium">Absent</p>
+                        <p className="text-3xl font-bold text-rose-600 mt-1">
+                          {attendanceSummary.absent}
+                        </p>
+                      </div>
+
+                      <div className="p-5 bg-yellow-50 rounded-2xl border border-yellow-100">
+                        <p className="text-xs text-yellow-600 font-medium">Attendance %</p>
+                        <p className="text-3xl font-bold text-yellow-600 mt-1">
+                          {attendanceSummary.percentage}%
+                        </p>
+                      </div>
+
                     </div>
+
+                    {/* PROGRESS BAR */}
+                    <div>
+                      <div className="flex justify-between text-xs text-slate-600 mb-2">
+                        <span>Overall Performance</span>
+                        <span>{attendanceSummary.percentage}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-3">
+                        <div
+                          className="bg-indigo-600 h-3 rounded-full transition-all duration-500"
+                          style={{ width: `${attendanceSummary.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {/* Month Selector */}
+                <div className="flex justify-end">
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="px-3 py-2 border rounded-lg bg-white text-sm"
+                  />
+                </div>
+
+
+                {/* Monthly Chart + Heatmap Side by Side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* MONTHLY CHART */}
+                  <div className="bg-white/70 rounded-2xl p-6 border border-slate-200">
+                    <h3 className="text-lg font-semibold mb-4">
+                      Monthly Attendance Overview
+                    </h3>
+
+                    {monthlyChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={monthlyChartData}>
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="present" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="absent" fill="#dc2626" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No monthly attendance data available.
+                      </p>
+                    )}
                   </div>
 
-                  <div className={`${glassCard} p-4`}>
-                    <div className="text-sm text-slate-600">Avg Attendance Rate</div>
-                    <div className="text-2xl font-bold text-indigo-600">
-                      {performance.average_attendance_rate}%
-                    </div>
+
+                  {/* HEATMAP */}
+                  <div className="bg-white/70 rounded-2xl p-6 border border-slate-200">
+                    <h3 className="text-lg font-semibold mb-4">
+                      Monthly Heatmap View
+                    </h3>
+
+                    <HeatmapCalendar
+                      selectedMonth={selectedMonth}
+                      heatmapData={heatmapData}
+                    />
+                  </div>
+
+                </div>
+
+
+                {/* ATTENDANCE HISTORY */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">
+                    Attendance History
+                  </h3>
+
+                  <div className="overflow-y-auto max-h-72 rounded-2xl border border-slate-200 bg-white/70">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-100 sticky top-0">
+                        <tr>
+                          <th className="p-3 text-left">Date</th>
+                          <th className="p-3 text-left">Status</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {selfAttendanceHistory.length > 0 ? (
+                          selfAttendanceHistory.map((r, i) => (
+                            <tr key={i} className="border-b">
+                              <td className="p-3 text-slate-700">
+                                {r.attendance_date}
+                              </td>
+                              <td className="p-3">
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold ${r.status === "PRESENT"
+                                    ? "bg-emerald-100 text-emerald-600"
+                                    : "bg-rose-100 text-rose-600"
+                                    }`}
+                                >
+                                  {r.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan={2}
+                              className="p-6 text-center text-slate-500"
+                            >
+                              No attendance history found.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
+
               </div>
             )}
-            {/* {activeTab === "students" && (
-              <div className={glassCard + " p-4"}>
-                Students UI will come here.
-              </div>
-            )} */}
-            {/* {activeTab === "assignments" && (
-              <div className={glassCard + " p-4"}>
-                Assignments UI will come here.
-              </div>
-            )} */}
-            {/* {activeTab === "schedule" && (
-              <div className={glassCard + " p-4"}>
-                Schedule UI will come here.
-              </div>
-            )} */}
+
+            {activeTab === "academicAssignments" && (
+              <TeacherAcademicAssignments glassCard={glassCard} />
+            )}
           </main>
         </div>
       </div>
+
+      {showCamera && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl w-96">
+            <h3 className="text-lg font-bold mb-4">Face Verification</h3>
+
+            <video ref={videoRef} autoPlay className="w-full h-60 bg-black rounded-lg" />
+            <canvas ref={canvasRef} className="hidden" />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => {
+                  stopCamera();
+                  setShowCamera(false);
+                }}
+                className="px-4 py-2 bg-gray-200 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={captureSelfAttendance}
+                disabled={markingLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg"
+              >
+                {markingLoading ? "Verifying..." : "Capture"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && (
         <div className="fixed bottom-4 right-4">
           <Toast
@@ -1182,4 +1476,59 @@ function DashboardReports({ glassCard, classes, assignments, classId, setClassId
     </div>
   );
 
+}
+
+
+function HeatmapCalendar({ selectedMonth, heatmapData }) {
+
+  // Generate full month days
+  const [year, month] = selectedMonth.split("-");
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  // Convert heatmapData to quick lookup
+  const statusMap = {};
+  heatmapData.forEach(d => {
+    statusMap[d.day] = d.status;
+  });
+
+  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  return (
+    <>
+      <div className="grid grid-cols-7 gap-2 text-xs text-center">
+        {daysArray.map(day => {
+          const status = statusMap[day];
+
+          let bgClass = "bg-gray-200";
+
+          if (status === "PRESENT") bgClass = "bg-green-500 text-white";
+          if (status === "ABSENT") bgClass = "bg-red-500 text-white";
+
+          return (
+            <div
+              key={day}
+              className={`p-3 rounded-lg font-medium ${bgClass}`}
+            >
+              {day}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-4 mt-4 text-xs">
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-green-500 rounded-sm" />
+          Present
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-red-500 rounded-sm" />
+          Absent
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-gray-300 rounded-sm" />
+          No Record
+        </div>
+      </div>
+    </>
+  );
 }

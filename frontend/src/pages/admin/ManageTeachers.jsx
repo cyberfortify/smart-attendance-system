@@ -30,6 +30,10 @@ export default function ManageTeachers() {
   const [importErrors, setImportErrors] = useState(null);
   const [subjects, setSubjects] = useState([]);
 
+  const [faceTeacher, setFaceTeacher] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
   const glassCard = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
   const glassCard2 = "rounded-2xl bg-white border border-white";
 
@@ -215,6 +219,54 @@ export default function ManageTeachers() {
     ).length;
   }
 
+  function openFaceModal(teacher) {
+    setFaceTeacher(teacher);
+    setTimeout(() => startCamera(), 300);
+  }
+
+  async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoRef.current.srcObject = stream;
+  }
+
+  function stopCamera() {
+    const stream = videoRef.current?.srcObject;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+  }
+
+  async function captureFace() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const blob = await new Promise(resolve =>
+      canvas.toBlob(resolve, "image/jpeg")
+    );
+
+    const formData = new FormData();
+    formData.append("image", blob);
+
+    try {
+      await api.post(
+        `/admin/teachers/${faceTeacher.teacher_profile_id}/register-face`,
+        formData
+      );
+
+      setToast({ message: "Teacher face registered!", variant: "success" });
+
+    } catch {
+      setToast({ message: "Face registration failed", variant: "error" });
+    }
+
+    stopCamera();
+    setFaceTeacher(null);
+  }
+
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden relative">
       {/* Header + stats */}
@@ -384,16 +436,23 @@ export default function ManageTeachers() {
                           </div>
 
                           <div className="flex items-center gap-2 ml-3">
-                            <div className="text-right hidden md:block">
-                              <div className="text-sm font-semibold text-slate-900">
-                                {getTeacherClassCount(t)}
-                              </div>
-                              <div className="text-xs text-slate-500">classes</div>
 
-                            </div>
+                            {/* Face Register Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation(); // prevent row click
+                                openFaceModal(t);
+                              }}
+                              className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                              title="Register Face"
+                            >
+                              📸
+                            </button>
+
                             <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 shadow-sm">
                               <MoreVertical className="w-4 h-4" />
                             </button>
+
                           </div>
                         </div>
                       </div>
@@ -652,7 +711,8 @@ export default function ManageTeachers() {
                   <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <select value={assignForm.teacher_id} onChange={e => setAssignForm({ ...assignForm, teacher_id: e.target.value })} className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 bg-white/80 outline-none text-sm">
                     <option value="">Choose a teacher</option>
-                    {teachers.map(t => <option key={t.user_id} value={t.user_id}>{t.name} ({t.employee_id})</option>)}
+                    {teachers.map(t =>
+                      <option key={t.user_id} value={t.user_id}>{t.name} ({t.employee_id})</option>)}
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 </div>
@@ -701,6 +761,49 @@ export default function ManageTeachers() {
           </div>
         </div>
       )}
+
+
+      {/* Face Register Modal */}
+      {faceTeacher && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+
+            <h2 className="text-lg font-bold mb-4">
+              Register Face - {faceTeacher.name}
+            </h2>
+
+            <video
+              ref={videoRef}
+              autoPlay
+              className="w-full h-60 bg-black rounded-lg"
+            />
+
+            <canvas ref={canvasRef} className="hidden" />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => {
+                  stopCamera();
+                  setFaceTeacher(null);
+                }}
+                className="px-4 py-2 bg-gray-200 rounded-lg"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={captureFace}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg"
+              >
+                Capture
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      
       {/* Toast */}
       {toast && <div className="fixed bottom-4 right-4 z-50 animate-slide-in"><Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} /></div>}
     </div>

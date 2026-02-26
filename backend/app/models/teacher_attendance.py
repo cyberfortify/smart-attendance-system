@@ -8,7 +8,7 @@ class TeacherAttendance(db.Model):
     teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"), nullable=False)
     attendance_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.Enum("PRESENT", "ABSENT"), nullable=False)
-    method = db.Column(db.String(50))  # FACE / MANUAL
+    method = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    teacher = db.relationship("Teacher", backref="self_attendance")
+    teacher = db.relationship("Teacher", backref="attendance_logs")
