@@ -14,6 +14,7 @@ import TakeAttendance from "./pages/teacher/TakeAttendanceSection";
 import TeacherReports from "./pages/teacher/TeacherReports";
 import TeacherReportsDaily from "./pages/teacher/TeacherReportsDaily";
 import TeacherReportsMonthly from "./pages/teacher/TeacherReportsMonthly";
+import StudentProfilePage from "./pages/teacher/StudentProfilePage";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentAttendance from "./pages/student/StudentAttendance";
 import { getUser } from "./utils/auth";
@@ -104,6 +105,10 @@ export default function App() {
       <Route path="/teacher/reports" element={<ProtectedRoute roles={["TEACHER"]}><TeacherReports /></ProtectedRoute>} />
       <Route path="/teacher/reports/daily" element={<ProtectedRoute roles={["TEACHER"]}><TeacherReportsDaily /></ProtectedRoute>} />
       <Route path="/teacher/reports/monthly" element={<ProtectedRoute roles={["TEACHER"]}><TeacherReportsMonthly /></ProtectedRoute>} />
+      <Route
+        path="/teacher/students/:studentId"
+        element={<StudentProfilePage />}
+      />
 
       <Route
         path="/student"

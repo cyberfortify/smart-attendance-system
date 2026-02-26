@@ -11,6 +11,7 @@ from app.utils.errors import APIError
 def get_class_defaulters(
     class_id: int,
     threshold: float = 75.0,
+    subject_id: int = None,
     date_from=None,
     date_to=None
 ) -> List[Dict]:
@@ -35,6 +36,10 @@ def get_class_defaulters(
         .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
         .filter(Student.class_id == class_id)
     )
+
+
+    if subject_id:
+        q = q.filter(AttendanceSession.subject_id == subject_id)
 
     if date_from:
         q = q.filter(AttendanceSession.session_date >= date_from)

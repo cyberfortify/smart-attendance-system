@@ -3,74 +3,96 @@ Admin routes: create/list/update/delete classes and students.
 Admin-only endpoints use role_required('ADMIN').
 Input JSON is validated using validate_json decorator where appropriate.
 """
+
 import csv
 import io
-from flask import request, jsonify
+import os
+import cv2
+import json
+import numpy as np
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from deepface import DeepFace
+from flask import request, jsonify, Blueprint
 from app.utils.security import generate_random_password
 from ...extensions import db
 from ...models.classes import Class as SchoolClass
 from ...models.student import Student
 from ...models.user import User
+from ...models.teacher_subject_assignments import TeacherSubjectAssignment
+from ...models.subject import Subject
+from ...models.teacher_classes import TeacherClass
+from ...models.teacher import Teacher
+from ...models.attendance_session import AttendanceSession
+from ...models.attendance_record import AttendanceRecord
+from ...models.notification import Notification
 from ...services.auth_service import create_user
 from ...utils.decorators import role_required
 from ...utils.validators import validate_json
 from ...utils.errors import APIError
-from flask import Blueprint
-from ...models.teacher_classes import TeacherClass
-from ...models.teacher import Teacher
 from datetime import datetime, timedelta
-from ...models.attendance_session import AttendanceSession
-from ...models.attendance_record import AttendanceRecord
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, case,or_
+from sqlalchemy import func, case, or_
 from flask_caching import Cache
+from flask_jwt_extended import get_jwt_identity
+from ...utils.notification_helper import create_notification
+
 cache = Cache(config={"CACHE_TYPE": "SimpleCache"})
 
 
 admin_bp = Blueprint("admin", __name__)
 
-# ---------- Admin notifications ----------
+# --------- Admin notifications ----------
 @admin_bp.route("/notifications", methods=["GET"])
 @role_required("ADMIN")
-def admin_notifications():
-    """
-    Simple admin notifications:
-    - Latest 3 students
-    - Latest 2 attendance sessions
-    """
+def get_admin_notifications():
     try:
-        items = []
+        user_id = get_jwt_identity()
 
-        # Latest students
-        students = Student.query.order_by(Student.id.desc()).limit(3).all()
-        for s in students:
-            name = s.user.name if getattr(s, "user", None) else "New student"
-            items.append({
-                "id": f"student-{s.id}",
-                "title": "New student registered",
-                "message": name,
-                "time": "recently",
-                "read": False,
-            })
+        notifications = (
+            Notification.query.filter_by(user_id=user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(20)
+            .all()
+        )
 
-        # Latest sessions
-        sessions = AttendanceSession.query.order_by(
-            AttendanceSession.session_date.desc()
-        ).limit(2).all()
-        for sess in sessions:
-            items.append({
-                "id": f"session-{sess.id}",
-                "title": "Attendance session completed",
-                "message": f"Class {sess.class_id}",
-                "time": str(sess.session_date),
-                "read": False,
-            })
+        data = [
+            {
+                "id": n.id,
+                "title": n.title,
+                "message": n.message,
+                "time": n.created_at.strftime("%d %b %Y %H:%M"),
+                "read": n.is_read,
+                "type": n.type,
+            }
+            for n in notifications
+        ]
 
-        # Max 5 items
-        return jsonify({"success": True, "data": items[:5]})
+        return jsonify({"success": True, "data": data})
     except Exception as e:
-        print("Notifications error:", e)
+        print("Error loading notifications:", e)
         raise APIError("Failed to load notifications", status_code=500)
+
+# Mark all notifications as read
+@admin_bp.route("/notifications/read", methods=["PATCH"])
+@role_required("ADMIN")
+def mark_notifications_read():
+    try:
+        user_id = get_jwt_identity()
+
+        Notification.query.filter_by(
+            user_id=user_id,
+            is_read=False
+        ).update({"is_read": True})
+
+        db.session.commit()
+
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        print("Mark read error:", e)
+        raise APIError("Failed to update notifications", status_code=500)
 
 # ---------- Class create + list + update + delete ----------
 @admin_bp.route("/classes", methods=["POST"])
@@ -95,14 +117,29 @@ def create_class():
     klass = SchoolClass(name=name, section=section, year=year)
     db.session.add(klass)
     db.session.commit()
+    admin_user_id = get_jwt_identity()
+
+    create_notification(
+        user_id=admin_user_id,
+        role="ADMIN",
+        title="Class Created",
+        message=f"Class {klass.name} created successfully.",
+        type="success"
+    )
+
     return jsonify({"success": True, "data": {"id": klass.id, "name": klass.name}}), 201
+
 
 @admin_bp.route("/classes", methods=["GET"])
 @role_required("ADMIN")
 def list_classes():
     classes = SchoolClass.query.all()
-    data = [{"id": c.id, "name": c.name, "section": c.section, "year": c.year} for c in classes]
+    data = [
+        {"id": c.id, "name": c.name, "section": c.section, "year": c.year}
+        for c in classes
+    ]
     return jsonify({"success": True, "data": data})
+
 
 @admin_bp.route("/classes/<int:class_id>", methods=["PUT"])
 @role_required("ADMIN")
@@ -121,7 +158,18 @@ def update_class(class_id):
         klass.name = data["name"]
     klass.section = data.get("section", klass.section)
     db.session.commit()
-    return jsonify({"success": True, "data": {"id": klass.id, "name": klass.name, "section": klass.section, "year": klass.year}})
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "id": klass.id,
+                "name": klass.name,
+                "section": klass.section,
+                "year": klass.year,
+            },
+        }
+    )
+
 
 @admin_bp.route("/classes/<int:class_id>", methods=["DELETE"])
 @role_required("ADMIN")
@@ -137,7 +185,9 @@ def delete_class(class_id):
 # ---------- Student create + list + update + delete ----------
 @admin_bp.route("/students", methods=["POST"])
 @role_required("ADMIN")
-@validate_json({"name": str, "email": str, "password": str, "roll_no": None, "class_id": None})
+@validate_json(
+    {"name": str, "email": str, "password": str, "roll_no": None, "class_id": None}
+)
 def create_student():
     """
     Create student user and student profile.
@@ -169,6 +219,16 @@ def create_student():
         student = Student(user_id=user.id, roll_no=roll_no, class_id=class_id)
         db.session.add(student)
         db.session.commit()
+        admin_user_id = get_jwt_identity()
+
+        create_notification(
+            user_id=admin_user_id,
+            role="ADMIN",
+            title="New Student Registered",
+            message=f"{user.name} has been added.",
+            type="success"
+        )
+
     except APIError:
         # re-raise APIError so central handler can manage it
         raise
@@ -180,6 +240,7 @@ def create_student():
         raise APIError("Failed to create student due to server error", status_code=500)
 
     return jsonify({"success": True, "data": student.to_dict()}), 201
+
 
 @admin_bp.route("/students", methods=["GET"])
 @role_required("ADMIN")
@@ -218,20 +279,20 @@ def list_students():
             print("INVALID class_id RECEIVED")
 
     pagination = base_query.order_by(Student.id).paginate(
-        page=page,
-        per_page=per_page,
-        error_out=False
+        page=page, per_page=per_page, error_out=False
     )
 
     data = []
     for s in pagination.items:
-        data.append({
-            "id": s.id,
-            "name": s.user.name,
-            "email": s.user.email,
-            "roll_no": s.roll_no,
-            "class_id": s.class_id,
-        })
+        data.append(
+            {
+                "id": s.id,
+                "name": s.user.name,
+                "email": s.user.email,
+                "roll_no": s.roll_no,
+                "class_id": s.class_id,
+            }
+        )
 
     return {
         "data": data,
@@ -239,6 +300,7 @@ def list_students():
         "page": pagination.page,
         "per_page": pagination.per_page,
     }, 200
+
 
 @admin_bp.route("/students/import", methods=["POST"])
 @role_required("ADMIN")
@@ -255,8 +317,7 @@ def import_students_csv():
     headers = set(h.lower().strip() for h in reader.fieldnames or [])
     if not required.issubset(headers):
         raise APIError(
-            f"CSV must contain columns: {', '.join(required)}",
-            status_code=400
+            f"CSV must contain columns: {', '.join(required)}", status_code=400
         )
 
     created = 0
@@ -280,10 +341,7 @@ def import_students_csv():
 
                 if not user:
                     user = create_user(
-                        name=name,
-                        email=email,
-                        password=password,
-                        role="STUDENT"
+                        name=name, email=email, password=password, role="STUDENT"
                     )
                     db.session.flush()
                     created += 1
@@ -293,9 +351,7 @@ def import_students_csv():
                 student = Student.query.filter_by(user_id=user.id).first()
                 if not student:
                     student = Student(
-                        user_id=user.id,
-                        roll_no=roll_no,
-                        class_id=class_id
+                        user_id=user.id, roll_no=roll_no, class_id=class_id
                     )
                     db.session.add(student)
                 else:
@@ -304,10 +360,7 @@ def import_students_csv():
 
             except Exception as row_err:
                 skipped += 1
-                errors.append({
-                    "row": idx,
-                    "error": str(row_err)
-                })
+                errors.append({"row": idx, "error": str(row_err)})
         db.session.commit()
 
     except Exception as e:
@@ -315,18 +368,26 @@ def import_students_csv():
         print("IMPORT FAILED:", e)
         raise APIError("Bulk import failed", status_code=500)
 
-    return jsonify({
-        "success": True,
-        "message": "Import completed",
-        "created_count": created,
-        "updated_count": updated,
-        "skipped_count": skipped,
-        "errors": errors
-    }), 200
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Import completed",
+                "created_count": created,
+                "updated_count": updated,
+                "skipped_count": skipped,
+                "errors": errors,
+            }
+        ),
+        200,
+    )
+
 
 @admin_bp.route("/students/<int:student_id>", methods=["PUT"])
 @role_required("ADMIN")
-@validate_json({"name": None, "email": None, "password": None, "roll_no": None, "class_id": None})
+@validate_json(
+    {"name": None, "email": None, "password": None, "roll_no": None, "class_id": None}
+)
 def update_student(student_id):
     student = Student.query.get(student_id)
     if not student:
@@ -338,7 +399,9 @@ def update_student(student_id):
         user.name = data["name"]
     if "email" in data and data["email"] is not None:
         # check duplicate
-        existing = User.query.filter(User.email == data["email"], User.id != user.id).first()
+        existing = User.query.filter(
+            User.email == data["email"], User.id != user.id
+        ).first()
         if existing:
             raise APIError("Email already in use", status_code=400)
         user.email = data["email"]
@@ -355,6 +418,7 @@ def update_student(student_id):
     db.session.commit()
     return jsonify({"success": True, "data": student.to_dict()})
 
+
 @admin_bp.route("/students/stats", methods=["GET"])
 @role_required("ADMIN")
 def student_stats():
@@ -364,14 +428,16 @@ def student_stats():
     start_month = datetime.utcnow().date().replace(day=1)
     new_this_month = Student.query.filter(Student.created_at >= start_month).count()
 
-    return jsonify({
-        "success": True,
-        "data": {
-            "total": total,
-            "with_class": with_class,
-            "new_this_month": new_this_month,
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "total": total,
+                "with_class": with_class,
+                "new_this_month": new_this_month,
+            },
         }
-    })
+    )
 
 
 @admin_bp.route("/students/<int:student_id>", methods=["DELETE"])
@@ -387,6 +453,7 @@ def delete_student(student_id):
     db.session.commit()
     return jsonify({"success": True, "message": "Student and user deleted"})
 
+
 @admin_bp.route("/export/students", methods=["GET"])
 @role_required("ADMIN")
 def export_students_csv():
@@ -401,7 +468,11 @@ def export_students_csv():
         query = query.filter(Student.class_id == class_id)
     if q:
         like = f"%{q}%"
-        query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)) | (Student.roll_no.ilike(like)))
+        query = query.filter(
+            (User.name.ilike(like))
+            | (User.email.ilike(like))
+            | (Student.roll_no.ilike(like))
+        )
 
     students = query.all()
 
@@ -410,12 +481,24 @@ def export_students_csv():
     writer = csv.writer(output)
     writer.writerow(["student_id", "name", "email", "roll_no", "class_id"])
     for s in students:
-        writer.writerow([s.id, s.user.name if s.user else "", s.user.email if s.user else "", s.roll_no or "", s.class_id or ""])
+        writer.writerow(
+            [
+                s.id,
+                s.user.name if s.user else "",
+                s.user.email if s.user else "",
+                s.roll_no or "",
+                s.class_id or "",
+            ]
+        )
     output.seek(0)
-    return (output.getvalue(), 200, {
-        "Content-Type": "text/csv",
-        "Content-Disposition": "attachment; filename=students_export.csv"
-    })
+    return (
+        output.getvalue(),
+        200,
+        {
+            "Content-Type": "text/csv",
+            "Content-Disposition": "attachment; filename=students_export.csv",
+        },
+    )
 
 
 # ---------- Teacher create + list ----------
@@ -426,13 +509,16 @@ def list_teachers():
     data = []
     for u in users:
         teacher_profile = getattr(u, "teacher_profile", None)
-        data.append({
-            "user_id": u.id,
-            "teacher_profile_id": teacher_profile.id if teacher_profile else None,
-            "name": u.name,
-            "email": u.email
-        })
+        data.append(
+            {
+                "user_id": u.id,
+                "teacher_profile_id": teacher_profile.id if teacher_profile else None,
+                "name": u.name,
+                "email": u.email,
+            }
+        )
     return jsonify({"success": True, "data": data})
+
 
 @admin_bp.route("/teachers", methods=["POST"])
 @role_required("ADMIN")
@@ -452,12 +538,38 @@ def create_teacher():
         teacher = Teacher(user_id=user.id, employee_id=data.get("employee_id"))
         db.session.add(teacher)
         db.session.commit()
+
+        admin_user_id = get_jwt_identity()
+
+        create_notification(
+            user_id=admin_user_id,
+            role="ADMIN",
+            title="New Teacher Added",
+            message=f"{user.name} joined as Teacher.",
+            type="success"
+        )
+
+
     except Exception as e:
         db.session.rollback()
         print("Error creating teacher:", e)
         raise APIError("Failed to create teacher", status_code=500)
 
-    return jsonify({"success": True, "data": {"user_id": user.id, "teacher_profile_id": teacher.id, "name": user.name, "email": user.email}}), 201
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": {
+                    "user_id": user.id,
+                    "teacher_profile_id": teacher.id,
+                    "name": user.name,
+                    "email": user.email,
+                },
+            }
+        ),
+        201,
+    )
+
 
 @admin_bp.route("/teacher-classes", methods=["POST"])
 @role_required("ADMIN")
@@ -483,13 +595,22 @@ def assign_teacher_to_class():
             raise APIError("Class not found", status_code=404)
 
         # Prevent duplicate mapping
-        existing = TeacherClass.query.filter_by(teacher_id=teacher.id, class_id=klass.id).first()
+        existing = TeacherClass.query.filter_by(
+            teacher_id=teacher.id, class_id=klass.id
+        ).first()
         if existing:
             return jsonify({"success": True, "data": existing.to_dict()})
 
         mapping = TeacherClass(teacher_id=teacher.id, class_id=klass.id)
         db.session.add(mapping)
         db.session.commit()
+        create_notification(
+            user_id=teacher.user_id,
+            role="TEACHER",
+            title="Class Assigned",
+            message=f"You have been assigned to class {klass.name}.",
+            type="info"
+        )
         return jsonify({"success": True, "data": mapping.to_dict()}), 201
 
     except APIError:
@@ -500,6 +621,7 @@ def assign_teacher_to_class():
         print("Error in assign_teacher_to_class:", e)
         db.session.rollback()
         raise APIError("Failed to assign teacher to class", status_code=500)
+
 
 @admin_bp.route("/teacher-classes", methods=["GET"])
 @role_required("ADMIN")
@@ -523,20 +645,23 @@ def list_teacher_classes():
                 if u:
                     teacher_name = u.name
 
-            out.append({
-                "id": m.id,
-                "teacher_id": m.teacher_id,
-                "teacher_name": teacher_name,
-                "class_id": m.class_id,
-                "class_name": klass.name if klass else None,
-                "section": klass.section if klass else None,
-                "year": klass.year if klass else None
-            })
+            out.append(
+                {
+                    "id": m.id,
+                    "teacher_id": m.teacher_id,
+                    "teacher_name": teacher_name,
+                    "class_id": m.class_id,
+                    "class_name": klass.name if klass else None,
+                    "section": klass.section if klass else None,
+                    "year": klass.year if klass else None,
+                }
+            )
         return jsonify({"success": True, "data": out})
     except Exception as e:
         # log server-side for debugging, then return a controlled error
         print("Error in list_teacher_classes:", e)
         raise APIError("Failed to load teacher-class mappings", status_code=500)
+
 
 @admin_bp.route("/teacher-classes", methods=["DELETE"])
 @role_required("ADMIN")
@@ -552,7 +677,9 @@ def unassign_teacher_from_class():
     if mapping_id:
         mapping = TeacherClass.query.get(mapping_id)
     elif teacher_id and class_id:
-        mapping = TeacherClass.query.filter_by(teacher_id=teacher_id, class_id=class_id).first()
+        mapping = TeacherClass.query.filter_by(
+            teacher_id=teacher_id, class_id=class_id
+        ).first()
     else:
         raise APIError("Provide mapping id OR teacher_id and class_id", status_code=400)
 
@@ -562,6 +689,7 @@ def unassign_teacher_from_class():
     db.session.delete(mapping)
     db.session.commit()
     return jsonify({"success": True, "message": "Mapping deleted"})
+
 
 # --------- Admin analytics ----------
 @admin_bp.route("/analytics", methods=["GET"])
@@ -579,37 +707,57 @@ def admin_analytics():
         total_teachers = Teacher.query.count()
 
         thirty = datetime.utcnow().date() - timedelta(days=30)
-        sessions_count = AttendanceSession.query.filter(AttendanceSession.session_date >= thirty).count()
+        sessions_count = AttendanceSession.query.filter(
+            AttendanceSession.session_date >= thirty
+        ).count()
 
         # average attendance percentage across sessions in last 30 days
-        subq = db.session.query(
-            AttendanceRecord.session_id.label("sid"),
-            func.sum(case((AttendanceRecord.status == "PRESENT", 1), else_=0)).label("present"),
-            func.count(AttendanceRecord.id).label("total")
-        ).join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id).filter(AttendanceSession.session_date >= thirty).group_by(AttendanceRecord.session_id).subquery()
+        subq = (
+            db.session.query(
+                AttendanceRecord.session_id.label("sid"),
+                func.sum(
+                    case((AttendanceRecord.status == "PRESENT", 1), else_=0)
+                ).label("present"),
+                func.count(AttendanceRecord.id).label("total"),
+            )
+            .join(
+                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
+            )
+            .filter(AttendanceSession.session_date >= thirty)
+            .group_by(AttendanceRecord.session_id)
+            .subquery()
+        )
 
-        rows = db.session.query(func.avg((subq.c.present * 1.0) / subq.c.total * 100)).all()
+        rows = db.session.query(
+            func.avg((subq.c.present * 1.0) / subq.c.total * 100)
+        ).all()
         avg_attendance = float(rows[0][0] or 0.0)
 
-        return jsonify({"success": True, "data": {
-            "total_students": total_students,
-            "total_teachers": total_teachers,
-            "sessions_last_30": sessions_count,
-            "avg_attendance_last_30": round(avg_attendance, 2)
-        }})
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "total_students": total_students,
+                    "total_teachers": total_teachers,
+                    "sessions_last_30": sessions_count,
+                    "avg_attendance_last_30": round(avg_attendance, 2),
+                },
+            }
+        )
     except Exception as e:
         print("Analytics error:", e)
         raise APIError("Failed to compute analytics", status_code=500)
-    
+
+
 @admin_bp.route("/analytics/attendance-trend", methods=["GET"])
 @role_required("ADMIN")
 def attendance_trend():
     period = request.args.get("period", "30d")
-    
+
     # Period mapping
     days_map = {"7d": 7, "30d": 30, "90d": 90, "1y": 365}
     days = days_map.get(period, 30)
-    
+
     try:
         today = datetime.utcnow().date()
         period_start = today - timedelta(days=days - 1)
@@ -618,11 +766,15 @@ def attendance_trend():
         subq = (
             db.session.query(
                 AttendanceRecord.session_id.label("sid"),
-                func.sum(case((AttendanceRecord.status == "PRESENT", 1), else_=0)).label("present"),
+                func.sum(
+                    case((AttendanceRecord.status == "PRESENT", 1), else_=0)
+                ).label("present"),
                 func.count(AttendanceRecord.id).label("total"),
                 AttendanceSession.session_date.label("session_date"),
             )
-            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
+            .join(
+                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
+            )
             .filter(AttendanceSession.session_date >= period_start)
             .filter(AttendanceSession.session_date <= today)
             .group_by(AttendanceRecord.session_id, AttendanceSession.session_date)
@@ -665,21 +817,33 @@ def attendance_pie():
         today = datetime.utcnow().date()
         start_date = today - timedelta(days=days - 1)
 
-        present_count = db.session.query(func.count(AttendanceRecord.id)) \
-            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id) \
+        present_count = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .join(
+                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
+            )
             .filter(
                 AttendanceSession.session_date >= start_date,
                 AttendanceSession.session_date <= today,
-                AttendanceRecord.status == "PRESENT"
-            ).scalar() or 0
+                AttendanceRecord.status == "PRESENT",
+            )
+            .scalar()
+            or 0
+        )
 
-        absent_count = db.session.query(func.count(AttendanceRecord.id)) \
-            .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id) \
+        absent_count = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .join(
+                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
+            )
             .filter(
                 AttendanceSession.session_date >= start_date,
                 AttendanceSession.session_date <= today,
-                AttendanceRecord.status == "ABSENT"
-            ).scalar() or 0
+                AttendanceRecord.status == "ABSENT",
+            )
+            .scalar()
+            or 0
+        )
 
         total = present_count + absent_count
 
@@ -690,16 +854,18 @@ def attendance_pie():
             present_pct = 0.0
             absent_pct = 0.0
 
-        return jsonify({
-            "success": True,
-            "data": {
-                "present": present_pct,
-                "absent": absent_pct,
-                "present_count": present_count,
-                "absent_count": absent_count,
-                "total": total,
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "present": present_pct,
+                    "absent": absent_pct,
+                    "present_count": present_count,
+                    "absent_count": absent_count,
+                    "total": total,
+                },
             }
-        })
+        )
 
     except Exception as e:
         print("Attendance pie error:", e)
@@ -723,40 +889,46 @@ def active_sessions():
     try:
         today = datetime.utcnow().date()
         week_days = [(today - timedelta(days=i)).isoformat()[:10] for i in range(7)]
-        
+
         # Today ke unique students jo attendance me hain
-        today_active = db.session.query(
-            func.count(func.distinct(AttendanceRecord.student_id))
-        ).join(
-            AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
-        ).filter(
-            AttendanceSession.session_date == today,
-            AttendanceRecord.status == "PRESENT"
-        ).scalar() or 0
-        
+        today_active = (
+            db.session.query(func.count(func.distinct(AttendanceRecord.student_id)))
+            .join(
+                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
+            )
+            .filter(
+                AttendanceSession.session_date == today,
+                AttendanceRecord.status == "PRESENT",
+            )
+            .scalar()
+            or 0
+        )
+
         # 7-day trend
         trend = []
         for day_str in week_days:
-            day_active = db.session.query(
-                func.count(func.distinct(AttendanceRecord.student_id))
-            ).join(
-                AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id
-            ).filter(
-                AttendanceSession.session_date == day_str,
-                AttendanceRecord.status == "PRESENT"
-            ).scalar() or 0
+            day_active = (
+                db.session.query(func.count(func.distinct(AttendanceRecord.student_id)))
+                .join(
+                    AttendanceSession,
+                    AttendanceSession.id == AttendanceRecord.session_id,
+                )
+                .filter(
+                    AttendanceSession.session_date == day_str,
+                    AttendanceRecord.status == "PRESENT",
+                )
+                .scalar()
+                or 0
+            )
             trend.append(int(day_active))
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "today": int(today_active),
-                "trend": trend
-            }
-        })
+
+        return jsonify(
+            {"success": True, "data": {"today": int(today_active), "trend": trend}}
+        )
     except Exception as e:
         print("Active sessions error:", e)
         raise APIError("Failed to compute active sessions", status_code=500)
+
 
 @admin_bp.route("/analytics/class-performance", methods=["GET"])
 @role_required("ADMIN")
@@ -818,19 +990,21 @@ def class_performance():
             else:
                 pct = 0.0
 
-            out.append({
-                "class_id": cls_id,
-                "name": f"{name}{' ' + section if section else ''}",
-                "attendance": pct,
-                "student_count": int(student_count or 0),
-            })
-
+            out.append(
+                {
+                    "class_id": cls_id,
+                    "name": f"{name}{' ' + section if section else ''}",
+                    "attendance": pct,
+                    "student_count": int(student_count or 0),
+                }
+            )
 
         return jsonify({"success": True, "data": out})
 
     except Exception as e:
         print("Class performance error:", e)
         raise APIError("Failed to compute class performance", status_code=500)
+
 
 # --------- Admin activity feed ----------
 @admin_bp.route("/activity", methods=["GET"])
@@ -839,9 +1013,11 @@ def admin_activity():
     # latest 3 students by id
     students = Student.query.order_by(Student.id.desc()).limit(3).all()
     # latest 2 sessions by id/date
-    sessions = AttendanceSession.query.order_by(
-        AttendanceSession.session_date.desc()
-    ).limit(2).all()
+    sessions = (
+        AttendanceSession.query.order_by(AttendanceSession.session_date.desc())
+        .limit(2)
+        .all()
+    )
 
     items = []
 
@@ -849,16 +1025,278 @@ def admin_activity():
         name = None
         if getattr(s, "user", None):
             name = s.user.name
-        items.append({
-            "text": f"New student registration - {name or 'Unknown'}",
-            "time": "recently",
-        })
+        items.append(
+            {
+                "text": f"New student registration - {name or 'Unknown'}",
+                "time": "recently",
+            }
+        )
 
     for sess in sessions:
-        items.append({
-            "text": f"Attendance session for class {sess.class_id}",
-            "time": str(sess.session_date),
-        })
+        items.append(
+            {
+                "text": f"Attendance session for class {sess.class_id}",
+                "time": str(sess.session_date),
+            }
+        )
 
     return jsonify({"success": True, "data": items[:5]})
 
+
+# --------- Subject create + list + update + delete ----------
+@admin_bp.route("/subjects", methods=["POST"])
+@role_required("ADMIN")
+def create_subject():
+    from ...models.subject import Subject
+
+    data = request.get_json() or {}
+
+    name = data.get("name")
+    class_id = data.get("class_id")
+
+    if not name or not class_id:
+        raise APIError("name and class_id required", 400)
+
+    subject = Subject(name=name, class_id=class_id)
+    db.session.add(subject)
+    db.session.commit()
+
+    admin_user_id = get_jwt_identity()
+
+    create_notification(
+        user_id=admin_user_id,
+        role="ADMIN",
+        title="Subject Created",
+        message=f"{subject.name} added to class.",
+        type="success"
+    )
+
+    return jsonify({"success": True, "data": subject.to_dict()}), 201
+
+
+# List subjects with class details
+@admin_bp.route("/subjects", methods=["GET"])
+@role_required("ADMIN")
+def list_subjects():
+    from ...models.subject import Subject
+
+    subjects = Subject.query.all()
+    return jsonify({"success": True, "data": [s.to_dict() for s in subjects]})
+
+
+# ---------- Delete subject ----------
+@admin_bp.route("/subjects/<int:subject_id>", methods=["DELETE"])
+@role_required("ADMIN")
+def delete_subject(subject_id):
+    from ...models.subject import Subject
+
+    subject = Subject.query.get(subject_id)
+    if not subject:
+        raise APIError("Subject not found", 404)
+
+    db.session.delete(subject)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Subject deleted"})
+
+
+# ---------- Teacher-subject assignment ----------
+@admin_bp.route("/teacher-subjects", methods=["POST"])
+@role_required("ADMIN")
+def assign_teacher_subject():
+    """
+    Assign subject to teacher for specific class.
+    Body: { teacher_id, class_id, subject_id }
+    """
+    data = request.get_json() or {}
+
+    teacher_id = data.get("teacher_id")
+    class_id = data.get("class_id")
+    subject_id = data.get("subject_id")
+
+    if not teacher_id or not class_id or not subject_id:
+        raise APIError("teacher_id, class_id and subject_id are required", 400)
+
+    teacher = Teacher.query.filter_by(user_id=teacher_id).first()
+    if not teacher:
+        raise APIError("Teacher not found", 404)
+
+    klass = SchoolClass.query.get(class_id)
+    if not klass:
+        raise APIError("Class not found", 404)
+
+    subject = Subject.query.filter_by(id=subject_id, class_id=class_id).first()
+    if not subject:
+        raise APIError("Subject not found in this class", 404)
+
+    existing = TeacherSubjectAssignment.query.filter_by(
+        teacher_id=teacher.id, class_id=class_id, subject_id=subject_id
+    ).first()
+
+    if existing:
+        return jsonify({"success": True, "message": "Already assigned"})
+
+    assignment = TeacherSubjectAssignment(
+        teacher_id=teacher.id, class_id=class_id, subject_id=subject_id
+    )
+
+    db.session.add(assignment)
+    db.session.commit()
+
+    create_notification(
+        user_id=teacher.user_id,
+        role="TEACHER",
+        title="New Subject Assigned",
+        message=f"You have been assigned to Class {klass.name} - {subject.name}",
+        type="info"
+    )
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "data": {
+                    "teacher_id": teacher.id,
+                    "class_id": class_id,
+                    "subject_id": subject_id,
+                },
+            }
+        ),
+        201,
+    )
+
+# ---------- Delete teacher-subject assignment ----------
+@admin_bp.route("/teacher-subjects/<int:assignment_id>", methods=["DELETE"])
+@role_required("ADMIN")
+def delete_teacher_subject(assignment_id):
+
+    assignment = TeacherSubjectAssignment.query.get(assignment_id)
+
+    if not assignment:
+        raise APIError("Assignment not found", 404)
+
+    db.session.delete(assignment)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Teacher subject assignment deleted successfully"
+    })
+
+@admin_bp.route("/students/<int:student_id>/register-face", methods=["POST"])
+@role_required("ADMIN")
+def register_student_face(student_id):
+
+    student = Student.query.get(student_id)
+    if not student:
+        raise APIError("Student not found", 404)
+
+    if "image" not in request.files:
+        raise APIError("Image required", 400)
+
+    file = request.files["image"]
+
+    try:
+        # Convert image
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+        if image is None:
+            raise APIError("Invalid image", 400)
+
+        # Convert to RGB
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # Convert to MediaPipe Image
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+
+        # Load face detection model
+        model_path = os.path.join("models", "blaze_face_short_range.tflite")
+
+        base_options = python.BaseOptions(model_asset_path=model_path)
+
+        options = vision.FaceDetectorOptions(
+            base_options=base_options, running_mode=vision.RunningMode.IMAGE
+        )
+
+        detector = vision.FaceDetector.create_from_options(options)
+
+        detection_result = detector.detect(mp_image)
+
+        if not detection_result.detections:
+            raise APIError("No face detected", 400)
+
+        # Get first face
+        bbox = detection_result.detections[0].bounding_box
+
+        x, y = bbox.origin_x, bbox.origin_y
+        w, h = bbox.width, bbox.height
+
+        face_crop = image[y : y + h, x : x + w]
+
+        if face_crop.size == 0:
+            raise APIError("Face crop failed", 400)
+
+        upload_dir = os.path.join("uploads", "faces")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        file_path = os.path.join(upload_dir, f"student_{student.id}.jpg")
+
+        cv2.imwrite(file_path, face_crop)
+
+        student.face_image_path = file_path
+        student.face_registered_at = datetime.utcnow()
+        db.session.commit()
+
+        embedding = DeepFace.represent(
+            img_path=file_path, model_name="ArcFace", enforce_detection=False
+        )[0]["embedding"]
+
+        student.face_embedding = json.dumps(embedding)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Face registered successfully"})
+
+    except APIError:
+        raise
+
+    except Exception as e:
+        db.session.rollback()
+        print("Face registration error:", e)
+        raise APIError("Face registration failed", 500)
+
+
+# ---------- List teacher-subject assignments ----------
+@admin_bp.route("/teacher-subjects", methods=["GET"])
+@role_required("ADMIN")
+def list_teacher_subjects():
+    from ...models.teacher_subject_assignments import TeacherSubjectAssignment
+    from ...models.teacher import Teacher
+    from ...models.classes import Class as SchoolClass
+    from ...models.subject import Subject
+    from ...models.user import User
+
+    assignments = TeacherSubjectAssignment.query.all()
+
+    data = []
+
+    for a in assignments:
+        teacher = Teacher.query.get(a.teacher_id)
+        user = User.query.get(teacher.user_id) if teacher else None
+        klass = SchoolClass.query.get(a.class_id)
+        subject = Subject.query.get(a.subject_id)
+
+        data.append(
+            {
+                "id": a.id,
+                "teacher_id": a.teacher_id,
+                "teacher_name": user.name if user else None,
+                "class_id": a.class_id,
+                "class_name": klass.name if klass else None,
+                "section": klass.section if klass else None,
+                "subject_id": a.subject_id,
+                "subject_name": subject.name if subject else None,
+            }
+        )
+
+    return jsonify({"success": True, "data": data})

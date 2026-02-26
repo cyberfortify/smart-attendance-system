@@ -4,7 +4,8 @@ from ...services.attendance_service import get_student_attendance
 from ...services.attendance_service import get_student_daily_attendance
 from ...services.attendance_service import get_student_weekly_attendance
 from ...services.attendance_service import get_student_monthly_attendance
-
+from ...models.notification import Notification
+from datetime import datetime
 from flask_jwt_extended import get_jwt_identity
 from ...utils.decorators import role_required
 
@@ -15,6 +16,58 @@ from app.models.attendance_session import AttendanceSession
 from app.models.student import Student
 
 student_bp = Blueprint("student", __name__)
+
+@student_bp.route("/notifications", methods=["GET"])
+@role_required("STUDENT")
+def get_student_notifications():
+    try:
+        user_id = int(get_jwt_identity())
+
+        notifications = (
+            Notification.query
+            .filter_by(user_id=user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(20)
+            .all()
+        )
+
+        data = [
+            {
+                "id": n.id,
+                "title": n.title,
+                "message": n.message,
+                "time": n.created_at.strftime("%d %b %Y %H:%M"),
+                "read": n.is_read,
+                "type": n.type,
+            }
+            for n in notifications
+        ]
+
+        return jsonify({"success": True, "data": data})
+
+    except Exception as e:
+        print("Student notification error:", e)
+        return jsonify({"success": False, "error": "Failed to load notifications"}), 500
+
+@student_bp.route("/notifications/read", methods=["PATCH"])
+@role_required("STUDENT")
+def mark_student_notifications_read():
+    try:
+        user_id = int(get_jwt_identity())
+
+        Notification.query.filter_by(
+            user_id=user_id,
+            is_read=False
+        ).update({"is_read": True})
+
+        db.session.commit()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        db.session.rollback()
+        print("Student mark read error:", e)
+        return jsonify({"success": False, "error": "Failed to update"}), 500
 
 @student_bp.route("/me/attendance", methods=["GET"])
 @role_required("STUDENT")
@@ -100,3 +153,53 @@ def my_analytics():
             "series": series,
         }
     })
+
+@student_bp.route("/me/calendar", methods=["GET"])
+@role_required("STUDENT")
+def my_calendar():
+    """
+    Returns last 90 days attendance
+    [
+        { "date": "2026-02-20", "status": "PRESENT" }
+    ]
+    """
+    try:
+        user_id = int(get_jwt_identity())
+        student = Student.query.filter_by(user_id=user_id).first()
+
+        if not student:
+            return jsonify({"success": False, "error": "Student not found"}), 404
+
+        from datetime import timedelta
+        today = date.today()
+        start_date = today - timedelta(days=90)
+
+        records = (
+            AttendanceRecord.query
+            .join(AttendanceSession)
+            .filter(
+                AttendanceRecord.student_id == student.id,
+                AttendanceSession.session_date >= start_date
+            )
+            .order_by(AttendanceSession.session_date.asc())
+            .all()
+        )
+
+        data = []
+        for record in records:
+            data.append({
+                "date": record.session.session_date.strftime("%Y-%m-%d"),
+                "status": record.status
+            })
+
+        return jsonify({
+            "success": True,
+            "data": data
+        })
+
+    except Exception as e:
+        print("Calendar error:", e)
+        return jsonify({"success": False, "error": "Failed to load calendar"}), 500
+    
+
+

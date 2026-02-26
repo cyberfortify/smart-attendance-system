@@ -43,7 +43,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         borderWidth: type === "pie" ? 3 : 2, // Pie thicker border
         tension: type === "line" ? 0.4 : 0, //  Fix for bar/pie
         fill: type === "line" ? true : false, //  Line fill only
-        clip: false,               
+        clip: false,
         pointRadius: type === "line" ? 3 : 0,
         pointHoverRadius: type === "line" ? 5 : 0,
       },
@@ -55,11 +55,15 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
     maintainAspectRatio: false,
     layout: {
       padding: {
-        top: 16,     // THIS FIXES THE CUT
+        top: 16,
         right: 8,
         left: 8,
         bottom: 8
       }
+    },
+    animation: {
+      animateScale: true,
+      animateRotate: true,
     },
 
     plugins: {
@@ -73,6 +77,7 @@ export default function ChartCard({ type, labels = [], data = [], height = 250 }
         }
       },
       tooltip: {
+        enabled: true,
         backgroundColor: "rgba(0,0,0,0.85)",
         titleColor: "white",
         bodyColor: "white",

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getUser, clearAuth } from "../../utils/auth";
 import {
@@ -14,46 +15,14 @@ import {
   X,
   Home,
 } from "lucide-react";
-import api, { fetchClassDaily, fetchClassMonthly, fetchTeacherClasses } from "../../api/axios";
+import api, {
+  fetchClassDaily,
+  fetchClassMonthly,
+  fetchTeacherAssignments
+} from "../../api/axios";
 import ChartCard from "../../components/ChartCard";
 import TakeAttendanceSection from "./TakeAttendanceSection";
 import Toast from "../../components/Toast";
-
-const STATIC_DEFAULTERS = [
-  // 🔴 Critical (<60%)
-  { student_id: 1, name: "Tejas Kumar", roll: "57", percent: 52, presents: 13, total_sessions: 25 },
-  { student_id: 2, name: "Anish Sharma", roll: "12", percent: 48, presents: 12, total_sessions: 25 },
-  { student_id: 3, name: "Aman Verma", roll: "26", percent: 55, presents: 14, total_sessions: 25 },
-  { student_id: 4, name: "Neha Mishra", roll: "74", percent: 58, presents: 14, total_sessions: 24 },
-
-  // 🟠 At Risk (60–69%)
-  { student_id: 5, name: "Riya Patel", roll: "43", percent: 60, presents: 18, total_sessions: 30 },
-  { student_id: 6, name: "Rahul Yadav", roll: "39", percent: 64, presents: 19, total_sessions: 30 },
-  { student_id: 7, name: "Sahil Khan", roll: "14", percent: 66, presents: 16, total_sessions: 24 },
-  { student_id: 8, name: "Aditi Joshi", roll: "82", percent: 68, presents: 19, total_sessions: 28 },
-  { student_id: 9, name: "Ishita Banerjee", roll: "63", percent: 69, presents: 20, total_sessions: 29 },
-
-  // 🟡 Borderline (70–74%)
-  { student_id: 10, name: "Vikram Singh", roll: "08", percent: 70, presents: 21, total_sessions: 30 },
-  { student_id: 11, name: "Pooja Nair", roll: "05", percent: 71, presents: 17, total_sessions: 24 },
-  { student_id: 12, name: "Rohit Malhotra", roll: "31", percent: 72, presents: 18, total_sessions: 25 },
-  { student_id: 13, name: "Kavya Iyer", roll: "59", percent: 73, presents: 21, total_sessions: 29 },
-  { student_id: 14, name: "Sneha Gupta", roll: "91", percent: 74, presents: 19, total_sessions: 26 },
-
-  // 🔴 More critical to balance charts
-  { student_id: 15, name: "Nikhil Chauhan", roll: "22", percent: 50, presents: 12, total_sessions: 24 },
-  { student_id: 16, name: "Arjun Reddy", roll: "47", percent: 56, presents: 14, total_sessions: 25 },
-
-  // 🟠 Extra risk
-  { student_id: 17, name: "Kunal Mehta", roll: "68", percent: 65, presents: 19, total_sessions: 29 },
-  { student_id: 18, name: "Mohit Agarwal", roll: "11", percent: 67, presents: 20, total_sessions: 30 },
-
-  // 🟡 Near threshold
-  { student_id: 19, name: "Simran Kaur", roll: "90", percent: 74, presents: 20, total_sessions: 27 },
-  { student_id: 20, name: "Tanvi Kulkarni", roll: "76", percent: 73, presents: 22, total_sessions: 30 },
-];
-
-
 
 
 export default function TeacherDashboard() {
@@ -62,16 +31,20 @@ export default function TeacherDashboard() {
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [assignments, setAssignments] = useState([]);
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
   const refreshDashboard = () => loadDashboard();
-  const [defaulters] = useState(STATIC_DEFAULTERS);
-  const [defaulterLoading] = useState(false);
+  const [defaulters, setDefaulters] = useState([]);
+  const [defaulterLoading, setDefaulterLoading] = useState(false);
   const [defaulterClassId, setDefaulterClassId] = useState("");
   const topDefaulters = [...defaulters]
     .sort((a, b) => a.percent - b.percent)
     .slice(0, 10);
 
+  const [threshold, setThreshold] = useState(75);
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [search, setSearch] = useState("");
   const defaulterLabels = topDefaulters.map(d => d.name);
   const defaulterValues = topDefaulters.map(d => d.percent);
   const criticalCount = defaulters.filter(d => d.percent < 60).length;
@@ -80,13 +53,10 @@ export default function TeacherDashboard() {
 
   const riskLabels = ["Critical (<60%)", "At Risk (60–69%)", "Borderline (70–74%)"];
   const riskValues = [criticalCount, riskCount, borderlineCount];
-  const sessionLabels = defaulters.map(d => d.name);
-  const presentValues = defaulters.map(d => d.presents);
-  const sessionValues = defaulters.map(d => d.total_sessions);
-
-
-
-
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [performance, setPerformance] = useState(null);
 
 
   const glassCard =
@@ -97,7 +67,8 @@ export default function TeacherDashboard() {
     { key: "attendance", label: "Take Attendance", icon: <ClipboardCheck className="w-4 h-4" /> },
     // { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
     // { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
-    { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> }
+    { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> },
+    { key: "performance", label: "Performance", icon: <BarChart3 className="w-4 h-4" /> }
     // { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
   ];
 
@@ -117,26 +88,51 @@ export default function TeacherDashboard() {
   ];
 
 
-  // useEffect(() => {
-  //   if (classes.length > 0 && !defaulterClassId) {
-  //     setDefaulterClassId(classes[0].id);
-  //   }
-  // }, [classes]);
+  async function loadNotifications() {
+    try {
+      const res = await api.get("/teacher/notifications");
+      const items = res.data.data || [];
+      setNotifications(items);
+      setUnreadCount(items.filter(n => !n.read).length);
+    } catch (err) {
+      console.error("Notification load error:", err);
+    }
+  }
 
-  // Load classes on mount
   useEffect(() => {
-    async function loadClasses() {
+    loadNotifications();
+
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 5000); // every 10 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+
+  useEffect(() => {
+    async function loadAssignments() {
       try {
-        const cls = await fetchTeacherClasses();
-        setClasses(cls || []);
-        if (cls && cls.length > 0) {
-          setClassId(cls[0].id);
+        const data = await fetchTeacherAssignments();
+        setAssignments(data);
+
+        // Extract unique classes
+        const uniqueClasses = [
+          ...new Map(data.map(a => [a.class_id, a])).values()
+        ];
+
+        setClasses(uniqueClasses);
+
+        if (uniqueClasses.length > 0) {
+          setClassId(uniqueClasses[0].class_id);
         }
+
       } catch (err) {
-        setToast({ message: "Could not load your classes", variant: "error" });
+        setToast({ message: "Could not load assignments", variant: "error" });
       }
     }
-    loadClasses();
+
+    loadAssignments();
   }, []);
 
   useEffect(() => {
@@ -152,6 +148,20 @@ export default function TeacherDashboard() {
     presentCount: 0,
     absentCount: 0,
   });
+
+
+  async function handleNotificationClick() {
+    setNotifOpen(v => !v);
+
+    if (unreadCount > 0) {
+      try {
+        await api.patch("/teacher/notifications/read");
+        await loadNotifications();
+      } catch (err) {
+        console.error("Failed to mark as read", err);
+      }
+    }
+  }
 
   function logout() {
     clearAuth();
@@ -190,6 +200,14 @@ export default function TeacherDashboard() {
         // No fallback - 0 values
       }
 
+
+      try {
+        const pRes = await api.get("/teacher/performance");
+        setPerformance(pRes.data.data);
+      } catch (err) {
+        console.warn("Performance API failed");
+      }
+
     } catch (err) {
       console.error("Dashboard error:", err);
     } finally {
@@ -197,35 +215,76 @@ export default function TeacherDashboard() {
     }
   }
 
-  // useEffect(() => {
-  //   if (!defaulterClassId) return;
+  // load defaulters
+  async function loadDefaulters(
+    classId,
+    thresholdValue = threshold,
+    subjectIdValue = subjectFilter
+  ) {
+    if (!classId) return;
 
-  //   async function loadDefaulters() {
-  //     setDefaulterLoading(true);
-  //     try {
-  //       const res = await api.get("/reports/defaulters", {
-  //         params: {
-  //           class_id: defaulterClassId,
-  //           threshold: 75
-  //         }
-  //       });
-  //       setDefaulters(res.data?.data || []);
-  //     } catch (e) {
-  //       console.warn("Defaulters API unavailable", e.response?.status);
-  //       setDefaulters([]);
-  //     } finally {
-  //       setDefaulterLoading(false);
-  //     }
-  //   }
+    try {
+      setDefaulterLoading(true);
 
-  //   loadDefaulters();
-  // }, [defaulterClassId]);
+      const res = await api.get("/reports/defaulters", {
+        params: {
+          class_id: classId,
+          threshold: thresholdValue,
+          subject_id: subjectIdValue || undefined
+        }
+      });
+
+      setDefaulters(res.data?.data || []);
+
+    } catch (err) {
+      console.error("Defaulters error:", err);
+      setDefaulters([]);
+    } finally {
+      setDefaulterLoading(false);
+    }
+  }
+
+  // load defaulters jab class change ho
+  useEffect(() => {
+    if (classes.length > 0) {
+      const firstClassId = classes[0].class_id;
+      setDefaulterClassId(firstClassId);
+      loadDefaulters(firstClassId);
+    }
+  }, [classes]);
 
 
+  // Auto reload when class / threshold / subject change
+  useEffect(() => {
+    if (defaulterClassId) {
+      loadDefaulters(defaulterClassId, threshold, subjectFilter);
+    }
+  }, [defaulterClassId, threshold, subjectFilter]);
 
-  const totalRecords = summary.presentCount + summary.absentCount || 1;
-  const presentPercent = Math.round((summary.presentCount * 100) / totalRecords);
-  const absentPercent = 100 - presentPercent;
+
+  const totalRecords = summary.presentCount + summary.absentCount;
+
+  const presentPercent =
+    totalRecords > 0
+      ? Math.round((summary.presentCount * 100) / totalRecords)
+      : 0;
+
+  const absentPercent =
+    totalRecords > 0
+      ? 100 - presentPercent
+      : 0;
+
+  const filteredDefaulters = useMemo(() => {
+    return defaulters.filter(d =>
+      d.name.toLowerCase().includes(search.toLowerCase()) ||
+      String(d.roll).toLowerCase().includes(search.toLowerCase())
+    );
+  }, [defaulters, search]);
+
+  const sessionLabels = filteredDefaulters.map(d => d.name);
+  const presentValues = filteredDefaulters.map(d => d.presents);
+  const sessionValues = filteredDefaulters.map(d => d.total_sessions);
+
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-[#f5e9ff] via-[#92aabf] to-[#92aabf] text-slate-900">
@@ -336,7 +395,54 @@ export default function TeacherDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-slate-700" />
+                <div className="relative">
+                  <button
+                    onClick={handleNotificationClick}
+                    className="relative p-2 rounded-full bg-white/30"
+                  >
+                    <Bell className="w-5 h-5 text-slate-700" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-1 ring-white" />
+                    )}
+                  </button>
+
+                  {notifOpen &&
+                    createPortal(
+                      <div className="fixed top-20 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
+                        <div className="px-4 py-3 border-b flex justify-between items-center">
+                          <span className="text-sm font-semibold">Notifications</span>
+                          <span className="text-xs text-slate-500">{unreadCount} new</span>
+                        </div>
+
+                        <div className="max-h-72 overflow-y-auto">
+                          {notifications.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-slate-500">
+                              No notifications
+                            </div>
+                          ) : (
+                            notifications.map(n => (
+                              <div
+                                key={n.id}
+                                className={`px-4 py-3 border-b last:border-b-0 text-sm ${n.is_read ? "bg-white" : "bg-indigo-50"
+                                  }`}
+                              >
+                                <div className="font-medium text-slate-800">
+                                  {n.title}
+                                </div>
+                                <div className="text-xs text-slate-600 mt-1">
+                                  {n.message}
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-1">
+                                  {new Date(n.created_at).toLocaleString()}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>,
+                      document.body
+                    )}
+                </div>
                 <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold">
                   {user?.name?.charAt(0) || "T"}
                 </div>
@@ -377,13 +483,21 @@ export default function TeacherDashboard() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                      <ChartCard
-                        type="pie"
-                        title=""
-                        labels={["Present", "Absent"]}
-                        data={[presentPercent, absentPercent]}
-                        height={180}
-                      />
+                      {totalRecords > 0 ? (
+                        <ChartCard
+                          key={presentPercent + "-" + absentPercent}
+                          type="pie"
+                          title=""
+                          labels={["Present", "Absent"]}
+                          data={[presentPercent, absentPercent]}
+                          height={180}
+
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-500 text-center">
+                          No attendance data available
+                        </div>
+                      )}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50">
                           <div className="flex items-center gap-2">
@@ -419,83 +533,28 @@ export default function TeacherDashboard() {
                   </div>
 
 
-                  {/* Top Defaulters (Static Preview) */}
-                  <div className={`${glassCard} p-4`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold text-slate-900">
-                          Top Defaulters
-                        </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-                          Preview
-                        </span>
-                      </div>
-
-                      {/* Disabled dropdown – static mode */}
-                      {/* <select
-                        disabled
-                        className="text-xs px-2 py-1 bg-white/50 rounded-lg border opacity-60 cursor-not-allowed"
-                      >
-                        <option>All Classes</option>
-                      </select> */}
-                    </div>
-
-                    {defaulters.length > 0 ? (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {defaulters.slice(0, 5).map((d) => (
-                          <div
-                            key={d.student_id}
-                            className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/60 border border-slate-100"
-                          >
-                            <div>
-                              <div className="text-xs font-semibold text-slate-900">
-                                {d.name}
-                              </div>
-                              <div className="text-[11px] text-slate-500">
-                                Roll: {d.roll}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs font-semibold text-rose-600">
-                                {d.percent}%
-                              </div>
-                              <div className="text-[10px] text-slate-500">
-                                {d.presents}/{d.total_sessions}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-32 text-center">
-                        <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
-                        <p className="text-xs text-slate-500">
-                          Defaulters preview not available
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-
-                  {/* Top Defaulters
+                  {/* Top Defaulters */}
                   <div className={`${glassCard} p-4`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="text-sm font-semibold text-slate-900">Top Defaulters</div>
+
                       <select
                         value={defaulterClassId}
-                        onChange={(e) => setDefaulterClassId(Number(e.target.value))}
-                        className="text-xs px-2 py-1 bg-white/50 rounded-lg border"
+                        onChange={(e) => {
+                          setDefaulterClassId(Number(e.target.value));
+                        }}
+                        className="px-4 py-2 border border-slate-200 rounded-xl bg-white/60 text-sm"
                       >
                         {classes.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
+                          <option key={c.class_id} value={c.class_id}>
+                            {c.class_name || c.name} {c.section ? `- ${c.section}` : ""}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     {defaulterLoading ? (
-                      <p className="text-xs text-slate-500">Loading...</p>
+                      <div className="text-xs text-slate-500">Loading...</div>
                     ) : defaulters.length > 0 ? (
                       <div className="space-y-2 max-h-64 overflow-y-auto">
                         {defaulters.slice(0, 5).map((d, i) => (
@@ -518,18 +577,17 @@ export default function TeacherDashboard() {
                     ) : (
                       <p className="text-xs text-slate-500">No defaulters found</p>
                     )}
-                  </div> */}
-
+                  </div>
                 </div>
 
                 {/* Third row: trend charts (daily/monthly) */}
                 <DashboardReports
                   glassCard={glassCard}
                   classes={classes}
+                  assignments={assignments}
                   classId={classId}
                   setClassId={setClassId}
                 />
-
               </>
             )}
 
@@ -538,8 +596,8 @@ export default function TeacherDashboard() {
               <TakeAttendanceSection
                 glassCard={glassCard}
                 onDone={async () => {
-                  await new Promise(r => setTimeout(r, 300));
-                  refreshDashboard();
+                  await loadDashboard();   // reload stats immediately
+                  await loadNotifications(); // reload notifications for any attendance-related alerts
                   setActiveTab("dashboard");
                 }}
                 showToast={(msg, variant = "success") =>
@@ -554,28 +612,97 @@ export default function TeacherDashboard() {
 
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-2xl font-bold text-slate-900">
-                        Defaulters Report
-                      </h2>
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-                        Preview
-                      </span>
-                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      Defaulters Report
+                    </h2>
                     <p className="text-slate-600 text-sm">
-                      Static preview – attendance below 75%
+                      Students below {threshold}% attendance
                     </p>
                   </div>
 
-                  {/* Disabled Class Selector */}
-                  {/* <select
-                    disabled
-                    className="px-4 py-2 border border-slate-200 rounded-xl bg-white/60
-                   text-sm font-medium min-w-[180px] opacity-60 cursor-not-allowed"
-                  >
-                    <option>All Classes</option>
-                  </select> */}
+                  <div className="flex flex-wrap items-center gap-3">
+
+                    {/* Class Selector */}
+                    <select
+                      value={defaulterClassId}
+                      onChange={(e) => {
+                        setDefaulterClassId(Number(e.target.value));
+                      }}
+                      className="px-4 py-2 border border-slate-200 rounded-xl bg-white/60 text-sm"
+                    >
+                      {classes.map((c) => (
+                        <option key={c.class_id} value={c.class_id}>
+                          {c.class_name || c.name} {c.section ? `- ${c.section}` : ""}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Subject Filter */}
+                    <select
+                      value={subjectFilter}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setSubjectFilter(val);
+                        loadDefaulters(defaulterClassId, threshold, val);
+                      }}
+                      className="px-4 py-2 border rounded-xl bg-white/60 text-sm"
+                    >
+                      <option value="">All Subjects</option>
+                      {assignments
+                        .filter(a => a.class_id === defaulterClassId)
+                        .map(a => (
+                          <option key={a.subject_id} value={a.subject_id}>
+                            {a.subject_name}
+                          </option>
+                        ))
+                      }
+                    </select>
+
+                    {/* Threshold Slider */}
+                    <div className="flex flex-col">
+                      <label className="text-xs text-slate-600">
+                        Threshold: {threshold}%
+                      </label>
+                      <input
+                        type="range"
+                        min="60"
+                        max="90"
+                        value={threshold}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setThreshold(val);
+                          loadDefaulters(defaulterClassId, threshold, val);
+                        }}
+                      />
+                    </div>
+
+                    {/* CSV Export */}
+                    <button
+                      onClick={() => {
+                        window.open(
+                          `/api/reports/defaulters.csv?class_id=${defaulterClassId}&threshold=${threshold}`,
+                          "_blank"
+                        );
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm"
+                    >
+                      Export CSV
+                    </button>
+
+                  </div>
+                </div>
+
+
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    placeholder="Search student..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="px-4 py-2 border rounded-xl bg-white/60 text-sm w-full sm:w-64"
+                  />
                 </div>
 
                 {/* Table (Fixed height + scroll) */}
@@ -591,16 +718,36 @@ export default function TeacherDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {defaulters.length > 0 ? (
-                          defaulters.map((d) => (
+                        {defaulterLoading ? (
+                          <tr>
+                            <td colSpan={4} className="p-6 text-center text-sm text-slate-500">
+                              Loading...
+                            </td>
+                          </tr>
+                        ) : filteredDefaulters.length > 0 ? (
+                          filteredDefaulters.map((d) => (
                             <tr
                               key={d.student_id}
                               className="hover:bg-white/80 transition-colors border-b border-slate-100 last:border-b-0"
                             >
-                              <td className="p-4 font-medium text-slate-900">{d.name}</td>
+                              <td>
+                                <button
+                                  onClick={() => navigate(`/teacher/students/${d.student_id}`)}
+                                  className="text-indigo-600 p-4 hover:underline"
+                                >
+                                  {d.name}
+                                </button>
+                              </td>
                               <td className="p-4 text-sm text-slate-600">{d.roll}</td>
                               <td className="p-4 text-right">
-                                <span className="text-rose-600 font-bold text-lg">
+                                <span
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold ${d.percent < 60
+                                    ? "bg-rose-100 text-rose-600"
+                                    : d.percent < 70
+                                      ? "bg-amber-100 text-amber-600"
+                                      : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                                >
                                   {d.percent}%
                                 </span>
                               </td>
@@ -639,7 +786,9 @@ export default function TeacherDashboard() {
                     </p>
                   </div>
 
-                  {defaulters.length > 0 ? (
+                  {defaulterLoading ? (
+                    <p className="text-sm text-slate-500">Loading...</p>
+                  ) : defaulters.length > 0 ? (
                     <ChartCard
                       type="bar"
                       title=""
@@ -668,7 +817,9 @@ export default function TeacherDashboard() {
                       </p>
                     </div>
 
-                    {defaulters.length > 0 ? (
+                    {defaulterLoading ? (
+                      <p className="text-sm text-slate-500">Loading...</p>
+                    ) : defaulters.length > 0 ? (
                       <ChartCard
                         type="pie"
                         title=""
@@ -694,7 +845,9 @@ export default function TeacherDashboard() {
                       </p>
                     </div>
 
-                    {defaulters.length > 0 ? (
+                    {defaulterLoading ? (
+                      <p className="text-sm text-slate-500">Loading...</p>
+                    ) : defaulters.length > 0 ? (
                       <ChartCard
                         type="bar"
                         title=""
@@ -722,7 +875,9 @@ export default function TeacherDashboard() {
                     </p>
                   </div>
 
-                  {defaulters.length > 0 ? (
+                  {defaulterLoading ? (
+                    <p className="text-sm text-slate-500">Loading...</p>
+                  ) : defaulters.length > 0 ? (
                     <ChartCard
                       type="line"
                       title=""
@@ -745,6 +900,37 @@ export default function TeacherDashboard() {
                 </div> */}
               </div>
             )}
+
+
+
+            {activeTab === "performance" && performance && (
+              <div className={`${glassCard} p-6 space-y-6`}>
+                <h2 className="text-xl font-bold">My Performance</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className={`${glassCard} p-4`}>
+                    <div className="text-sm text-slate-600">Sessions Taken</div>
+                    <div className="text-2xl font-bold">
+                      {performance.total_sessions_taken}
+                    </div>
+                  </div>
+
+                  <div className={`${glassCard} p-4`}>
+                    <div className="text-sm text-slate-600">Student Records</div>
+                    <div className="text-2xl font-bold">
+                      {performance.total_student_records}
+                    </div>
+                  </div>
+
+                  <div className={`${glassCard} p-4`}>
+                    <div className="text-sm text-slate-600">Avg Attendance Rate</div>
+                    <div className="text-2xl font-bold text-indigo-600">
+                      {performance.average_attendance_rate}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* {activeTab === "students" && (
               <div className={glassCard + " p-4"}>
                 Students UI will come here.
@@ -755,16 +941,11 @@ export default function TeacherDashboard() {
                 Assignments UI will come here.
               </div>
             )} */}
-
-
             {/* {activeTab === "schedule" && (
               <div className={glassCard + " p-4"}>
                 Schedule UI will come here.
               </div>
             )} */}
-
-
-
           </main>
         </div>
       </div>
@@ -783,7 +964,7 @@ export default function TeacherDashboard() {
 }
 
 /** Embedded daily/monthly trend charts row */
-function DashboardReports({ glassCard, classes, classId, setClassId }) {
+function DashboardReports({ glassCard, classes, assignments, classId, setClassId }) {
   const [activeReportTab, setActiveReportTab] = useState("daily");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -792,6 +973,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
   const [monthlyData, setMonthlyData] = useState(null);
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [subjectId, setSubjectId] = useState("");
 
 
   useEffect(() => {
@@ -807,7 +989,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
     if (!classId || !from || !to) return;
     setLoadingDaily(true);
     try {
-      const rows = await fetchClassDaily(classId, from, to);
+      const rows = await fetchClassDaily(classId, subjectId, from, to);
       setDailyData(rows);
     } catch (err) {
       console.error(err);
@@ -820,7 +1002,7 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
     if (!classId || !year) return;
     setLoadingMonthly(true);
     try {
-      const rows = await fetchClassMonthly(classId, year);
+      const rows = await fetchClassMonthly(classId, subjectId, year);
       setMonthlyData(rows);
     } catch (err) {
       console.error(err);
@@ -837,6 +1019,9 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
   const monthlyLabels = (monthlyData || []).map(d => `M-${d.month}`);
   const monthlyValues = (monthlyData || []).map(d => d.present);
 
+  const filteredSubjects = assignments.filter(
+    a => a.class_id === Number(classId)
+  );
   return (
     <div className="space-y-4">
       {/* Heading card */}
@@ -883,8 +1068,26 @@ function DashboardReports({ glassCard, classes, classId, setClassId }) {
               className="px-3 py-2 border rounded-lg text-sm bg-white/80 border-slate-200"
             >
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.section ? `- ${c.section}` : ""}
+                <option key={c.class_id} value={c.class_id}>
+                  {c.class_name || c.name} {c.section ? `- ${c.section}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Subject dropdown (filtered based on selected class) */}
+          <div className="flex flex-col w-full sm:w-auto">
+            <label className="text-xs text-slate-600 mb-1">Subject</label>
+            <select
+              value={subjectId}
+              onChange={(e) => setSubjectId(Number(e.target.value))}
+              className="px-3 py-2 border rounded-lg text-sm bg-white/80 border-slate-200"
+              disabled={!classId}
+            >
+              <option value="">Select Subject</option>
+              {filteredSubjects.map((s) => (
+                <option key={s.subject_id} value={s.subject_id}>
+                  {s.subject_name}
                 </option>
               ))}
             </select>

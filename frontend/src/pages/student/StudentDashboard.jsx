@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getUser, clearAuth } from "../../utils/auth";
 import api from "../../api/axios";
@@ -23,6 +24,8 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Data states
   const [attendanceSummary, setAttendanceSummary] = useState(null); // overall
@@ -31,6 +34,7 @@ export default function StudentDashboard() {
   const [classInfo, setClassInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [calendarData, setCalendarData] = useState([]);
 
   // Range + metric for analytics
   const [range, setRange] = useState("month"); // "day" | "week" | "month" | "year"
@@ -88,6 +92,14 @@ export default function StudentDashboard() {
             percentage: summaryData?.percentage || 0,
           });
         }
+
+        // 4) Calendar data (for streak)
+        try {
+          const calRes = await api.get("/student/me/calendar");
+          setCalendarData(calRes.data?.data || []);
+        } catch (_err) {
+          setCalendarData([]);
+        }
       } catch (err) {
         console.error("Student data load error:", err);
         setToast({
@@ -103,6 +115,20 @@ export default function StudentDashboard() {
     loadStudentData();
   }, [range]);
 
+
+  async function loadNotifications() {
+    try {
+      const res = await api.get("/student/notifications");
+      setNotifications(res.data.data || []);
+    } catch (err) {
+      console.error("Notification load error:", err);
+    }
+  }
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
   function logout() {
     clearAuth();
     navigate("/login");
@@ -113,12 +139,93 @@ export default function StudentDashboard() {
   const totalSessions = attendanceSummary?.total_sessions || attendanceSummary?.total || 0;
   const presentCount = attendanceSummary?.present || 0;
   const absentCount = attendanceSummary?.absent || 0;
+
+  // 1️ Risk Level
+  const getRiskLevel = () => {
+    if (overallPercent >= 75) {
+      return { label: "SAFE", color: "text-emerald-600 bg-emerald-100" };
+    }
+    if (overallPercent >= 60) {
+      return { label: "WARNING", color: "text-amber-600 bg-amber-100" };
+    }
+    return { label: "CRITICAL", color: "text-rose-600 bg-rose-100" };
+  };
+  const risk = getRiskLevel();
+
+  // 2️ Required Classes Calculator
+  const calculateRequiredClasses = () => {
+    if (!attendanceSummary || totalSessions === 0) return 0;
+
+    let present = presentCount;
+    let total = totalSessions;
+    let needed = 0;
+
+    while ((present / total) * 100 < 75) {
+      present++;
+      total++;
+      needed++;
+    }
+
+    return needed;
+  };
+  const requiredClasses = calculateRequiredClasses();
+
+  // 3️ Attendance Prediction (Monthly Trend Based)
+  const predictFinalAttendance = () => {
+    if (yearlyData.length < 2) return overallPercent;
+
+    const lastMonth = yearlyData[yearlyData.length - 1]?.percentage || 0;
+    const prevMonth = yearlyData[yearlyData.length - 2]?.percentage || 0;
+
+    const trend = lastMonth - prevMonth;
+
+    const prediction = overallPercent + trend;
+
+    return Math.max(0, Math.min(100, prediction));
+  };
+  const predictedPercent = predictFinalAttendance();
+
+  const calculateStreaks = () => {
+    if (!calendarData.length) return { current: 0, longest: 0 };
+
+    let current = 0;
+    let longest = 0;
+    let temp = 0;
+
+    const sorted = [...calendarData].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+
+    // Longest streak
+    sorted.forEach((day) => {
+      if (day.status === "PRESENT") {
+        temp++;
+        longest = Math.max(longest, temp);
+      } else {
+        temp = 0;
+      }
+    });
+
+    // Current streak (from latest)
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].status === "PRESENT") {
+        current++;
+      } else {
+        break;
+      }
+    }
+
+    return { current, longest };
+  };
+
+  const streak = calculateStreaks();
+
   const piePresentPercent =
     totalSessions > 0 ? Math.round((presentCount * 100) / totalSessions) : 0;
   const pieAbsentPercent = 100 - piePresentPercent;
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-emerald-50 via-blue-50 to-indigo-100 text-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-blue-50 to-indigo-100 text-slate-900">
       {/* Background decoration */}
       <div className="fixed inset-0 -z-10 pointer-events-none">
         <div className="absolute -left-32 -top-24 w-96 h-96 bg-emerald-200/30 rounded-full blur-3xl" />
@@ -260,7 +367,61 @@ export default function StudentDashboard() {
                     </button>
                   ))}
                 </div>
-                <Bell className="w-5 h-5 text-slate-600" />
+                {/* Notifications */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="relative"
+                  >
+                    <Bell className="w-5 h-5 text-slate-600" />
+
+                    {notifications.filter(n => !n.read).length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                        {notifications.filter(n => !n.read).length}
+                      </span>
+                    )}
+                  </button>
+
+                  {showNotifications &&
+                    createPortal(
+                      <div className="fixed top-24 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
+                        <div className="p-3 border-b font-semibold">Notifications</div>
+
+                        {notifications.length === 0 ? (
+                          <div className="p-4 text-sm text-slate-500">
+                            No notifications
+                          </div>
+                        ) : (
+                          notifications.map((n) => (
+                            <div
+                              key={n.id}
+                              className={`p-3 border-b text-sm ${n.is_read ? "bg-white" : "bg-emerald-50"
+                                }`}
+                            >
+                              <div className="font-medium">{n.title}</div>
+                              <div className="text-slate-600">{n.message}</div>
+                              {/* <div className="text-xs text-slate-400 mt-1">
+                                {new Date(n.created_at).toLocaleString()}
+                              </div> */}
+                            </div>
+                          ))
+                        )}
+
+                        <button
+                          onClick={async () => {
+                            await api.patch("/student/notifications/read");
+                            setNotifications(
+                              notifications.map((n) => ({ ...n, is_read: true }))
+                            );
+                          }}
+                          className="w-full py-2 text-sm bg-emerald-500 text-white rounded-b-xl"
+                        >
+                          Mark all as read
+                        </button>
+                      </div>,
+                      document.body
+                    )}
+                </div>
               </div>
             </div>
           </header>
@@ -322,6 +483,61 @@ export default function StudentDashboard() {
                       {overallPercent}%
                     </div>
                     <div className="text-sm text-slate-600">Overall attendance</div>
+                  </div>
+
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                  {/* Required Classes */}
+                  <div className={`${glassCard} p-6`}>
+                    <h4 className="text-sm font-semibold mb-3 text-slate-700">
+                      Required to Reach 75%
+                    </h4>
+                    <div className="text-2xl font-bold text-slate-900">
+                      {requiredClasses}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Attend next {requiredClasses} classes continuously
+                    </p>
+                  </div>
+
+                  {/* Prediction */}
+                  <div className={`${glassCard} p-6`}>
+                    <h4 className="text-sm font-semibold mb-3 text-slate-700">
+                      Predicted Final %
+                    </h4>
+                    <div className="text-2xl font-bold text-indigo-600">
+                      {predictedPercent.toFixed(1)}%
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      If current trend continues
+                    </p>
+                  </div>
+
+                  <div className={`${glassCard} p-6`}>
+                    <h4 className="text-sm font-semibold mb-3 text-slate-700">
+                      Attendance Streak
+                    </h4>
+
+                    <div className="flex items-center gap-8">
+                      <div>
+                        <div className="text-2xl font-bold text-emerald-600">
+                          🔥 {streak.current}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Current
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-2xl font-bold text-indigo-600">
+                          🏆 {streak.longest}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Longest
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

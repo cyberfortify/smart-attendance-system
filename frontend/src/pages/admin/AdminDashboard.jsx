@@ -6,6 +6,7 @@ import { getUser, clearAuth } from "../../utils/auth";
 import {
   Users,
   BookOpen,
+  BookMarked,
   UserCog,
   BarChart3,
   LogOut,
@@ -22,6 +23,7 @@ import {
 import ManageStudents from "./ManageStudents";
 import ManageTeachers from "./ManageTeachers";
 import ManageClasses from "./ManageClasses";
+import ManageSubjects from "./ManageSubjects";
 import AdminAnalyticsWidget from "./AdminAnalyticsWidget";
 import ChartCard from "../../components/ChartCard";
 
@@ -42,6 +44,19 @@ export default function AdminDashboard() {
   const notifRef = useRef(null);
 
 
+  async function loadNotifications() {
+    try {
+      const res = await api.get("/admin/notifications");
+      const items = res.data.data || [];
+      setNotifications(items);
+      setUnreadCount(items.filter((n) => !n.read).length);
+    } catch (err) {
+      console.error("Notifications load error:", err);
+    }
+  }
+
+
+``
   async function refreshAllDashboardData() {
     try {
       setLoadingStats(true);
@@ -64,19 +79,17 @@ export default function AdminDashboard() {
 
   const glassMainContent = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
 
+
   useEffect(() => {
-    async function loadNotifications() {
-      try {
-        const res = await api.get("/admin/notifications");
-        const items = res.data.data || [];
-        setNotifications(items);
-        setUnreadCount(items.filter((n) => !n.read).length);
-      } catch (err) {
-        console.error("Notifications load error:", err);
-      }
-    }
-    loadNotifications();
+    loadNotifications(); // initial load
+
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 500); // every 10 seconds
+
+    return () => clearInterval(interval);
   }, []);
+
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -111,9 +124,10 @@ export default function AdminDashboard() {
 
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
-    { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
     { key: "teachers", label: "Teachers", icon: <UserCog className="w-4 h-4" /> },
     { key: "classes", label: "Classes", icon: <BookOpen className="w-4 h-4" /> },
+    { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
+    { key: "subjects", label: "Subjects", icon: <BookMarked className="w-4 h-4" /> },
     { key: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> }
   ];
 
@@ -143,7 +157,7 @@ export default function AdminDashboard() {
           ? `${analytics.avg_attendance_last_30}%`
           : "0"),
       subtitle: "Since last month",
-      change: "+2.3%", 
+      change: "+2.3%",
     },
   ];
 
@@ -371,6 +385,14 @@ export default function AdminDashboard() {
           </div>
         );
 
+
+      case "subjects":
+        return (
+          <div >
+            <ManageSubjects />
+          </div>
+        );
+
       case "classes":
         return (
           <div >
@@ -389,6 +411,18 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleNotificationClick() {
+    setNotifOpen((v) => !v);
+
+    if (unreadCount > 0) {
+      try {
+        await api.patch("/admin/notifications/read");
+        await loadNotifications(); //  instant refresh
+      } catch (err) {
+        console.error("Failed to mark notifications as read", err);
+      }
+    }
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f5e9ff] via-[#92aabf] to-[#92aabf] text-slate-900">
       {/* subtle top-left vignette to match image */}
@@ -528,13 +562,7 @@ export default function AdminDashboard() {
                   </div>
                   <button
                     className="p-2 rounded-full bg-white/30 relative"
-                    onClick={() => {
-                      setNotifOpen((v) => !v);
-                      if (unreadCount > 0) {
-                        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-                        setUnreadCount(0);
-                      }
-                    }}
+                    onClick={handleNotificationClick}
                   >
                     <Bell className="w-5 h-5 text-slate-700" />
                     {unreadCount > 0 && (
@@ -589,7 +617,7 @@ export default function AdminDashboard() {
           </header>
 
           {/* Content */}
-         <main className="flex-1 px-3 sm:px-4 lg:px-8 pt-4 pb-8 space-y-5 overflow-x-hidden">
+          <main className="flex-1 px-3 sm:px-4 lg:px-8 pt-4 pb-8 space-y-5 overflow-x-hidden">
 
             {renderContent()}
           </main>

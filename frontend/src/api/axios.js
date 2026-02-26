@@ -30,16 +30,25 @@ api.interceptors.response.use(
 );
 
 // helper functions (including fetchTeacherClasses)
-export async function fetchClassDaily(classId, from, to) {
-  const res = await api.get(`/reports/class/daily`, {
-    params: { class_id: classId, from, to },
+export async function fetchClassDaily(classId, subjectId, from, to) {
+  const res = await api.get("/reports/class/daily", {
+    params: {
+      class_id: classId,
+      subject_id: subjectId || undefined,
+      from,
+      to
+    }
   });
   return res.data.data;
 }
 
-export async function fetchClassMonthly(classId, year) {
-  const res = await api.get(`/reports/class/monthly`, {
-    params: { class_id: classId, year },
+export async function fetchClassMonthly(classId, subjectId, year) {
+  const res = await api.get("/reports/class/monthly", {
+    params: {
+      class_id: classId,
+      subject_id: subjectId || undefined,
+      year
+    }
   });
   return res.data.data;
 }
@@ -63,5 +72,9 @@ export async function fetchTeacherStudents(classId) {
   return res.data?.data || [];
 }
 
+export async function fetchTeacherAssignments() {
+  const res = await api.get("/teacher/assignments");
+  return res.data?.data || [];
+}
 
 export default api;

@@ -1,33 +1,48 @@
 import React, { useEffect, useState } from "react";
-import api, { fetchTeacherClasses } from "../../api/axios";
+import api, { fetchTeacherAssignments } from "../../api/axios";
 import AttendanceTable from "../../components/AttendanceTable";
-// import ConfirmModal from "../../components/ConfirmModal";
+import FaceAttendanceSection from "./FaceAttendanceSection";
 import Toast from "../../components/Toast";
 
 export default function TakeAttendanceSection({ onDone, glassCard, showToast }) {
   const [students, setStudents] = useState([]);
   const [values, setValues] = useState({});
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [classId, setClassId] = useState("");
-  const [classes, setClasses] = useState([]);
+  const [faceMode, setFaceMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [classId, setClassId] = useState("");
+  const [classes, setClasses] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState("");
+  const filteredSubjects = assignments.filter(
+    a => a.class_id === Number(classId)
+  );
 
-  // 1️ Load teacher classes
   useEffect(() => {
-    async function loadClasses() {
+    async function loadAssignments() {
       try {
-        const cls = await fetchTeacherClasses();
-        setClasses(cls || []);
-        if (cls && cls.length > 0) {
-          setClassId(cls[0].id);
+        const data = await fetchTeacherAssignments();
+        setAssignments(data || []);
+
+        // Extract unique classes
+        const uniqueClasses = [
+          ...new Map(data.map(a => [a.class_id, a])).values()
+        ];
+
+        setClasses(uniqueClasses);
+
+        if (uniqueClasses.length > 0) {
+          setClassId(uniqueClasses[0].class_id);
         }
+
       } catch (err) {
-        setToast({ message: "Could not load your classes", variant: "error" });
+        showToast("Could not load assignments", "error");
       }
     }
-    loadClasses();
+
+    loadAssignments();
   }, []);
 
   // 2️ Load students when class changes
@@ -52,10 +67,10 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
       } catch (err) {
         setStudents([]);
         setValues({});
-        setToast({
-          message: err.response?.data?.error || "Could not load students",
-          variant: "error",
-        });
+        showToast(
+          err.response?.data?.error || "Could not load students",
+          "error"
+        );
       } finally {
         setLoadingStudents(false);
       }
@@ -69,75 +84,22 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
 
   function openConfirm() {
     if (!classId) {
-      setToast({ message: "Select a class first", variant: "error" });
+      showToast("Select a class first", "error");
       return;
     }
+
+    if (!selectedSubject) {
+      showToast("Select a subject first", "error");
+      return;
+    }
+
     if (students.length === 0) {
-      setToast({ message: "No students in this class", variant: "error" });
+      showToast("No students in this class", "error");
       return;
     }
+
     setConfirmOpen(true);
   }
-
-  // async function handleConfirm() {
-  //   setConfirmOpen(false);
-  //   setLoading(true);
-
-  //   try {
-  //     const records = Object.keys(values).map((k) => ({
-  //       student_id: Number(k),
-  //       status: values[k],
-  //     }));
-
-  //     if (records.length === 0) {
-  //       setToast({ message: "No attendance data to save", variant: "error" });
-  //       setLoading(false);
-  //       return;
-  //     }
-
-  //     let sessionId;
-
-  //     try {
-  //       // 1️ Try to create session
-  //       const res = await api.post("/teacher/sessions", {
-  //         class_id: Number(classId),
-  //         session_date: date,
-  //       });
-  //       sessionId = res.data.data.session_id;
-  //     } catch (err) {
-  //       // 2️ If already exists (409), reuse existing session
-  //       if (err.response?.status === 409) {
-  //         const year = new Date(date).getFullYear();
-  //         const sessionsRes = await api.get("/teacher/sessions", {
-  //           params: { class_id: Number(classId), year },
-  //         });
-
-  //         const existing = sessionsRes.data.data.find(
-  //           (s) => s.session_date === date
-  //         );
-
-  //         if (!existing) {
-  //           throw err;
-  //         }
-  //         sessionId = existing.id;
-  //       } else {
-  //         throw err;
-  //       }
-  //     }
-
-
-  //     // 3️ Save attendance records
-  //     await api.put(`/teacher/sessions/${sessionId}/records`, records);
-
-  //     showToast("Attendance saved successfully", "success");
-  //     onDone && onDone();
-
-  //   } catch (err) {
-  //     showToast("Failed to save attendance", "error");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // }
 
   async function handleConfirm() {
     setConfirmOpen(false);
@@ -160,13 +122,14 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
       try {
         const res = await api.post("/teacher/sessions", {
           class_id: Number(classId),
+          subject_id: Number(selectedSubject),
           session_date: date,
         });
         sessionId = res.data.data.session_id;
 
       } catch (err) {
         if (err.response?.status === 409) {
-          // ✅ SESSION EXISTS — get it
+          // SESSION EXISTS — get it
           const year = new Date(date).getFullYear();
 
           const sessionsRes = await api.get("/teacher/sessions", {
@@ -179,9 +142,9 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
           const existing = sessionsRes.data.data.find(
             (s) =>
               s.session_date === date &&
-              s.class_id === Number(classId)
+              s.class_id === Number(classId) &&
+              s.subject_id === Number(selectedSubject)
           );
-
 
           if (!existing) {
             throw new Error("Session exists but not found");
@@ -229,21 +192,46 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
 
       {/* Filters */}
       <div className="mb-4 flex flex-col sm:flex-row gap-3 sm:gap-4 flex-wrap">
+
+        {/* CLASS FILTER */}
         <div className="flex flex-col">
           <label className="text-xs text-slate-600 mb-1">Class</label>
           <select
             value={classId}
-            onChange={(e) => setClassId(Number(e.target.value))}
+            onChange={(e) => {
+              setClassId(Number(e.target.value));
+              setSelectedSubject(""); // reset subject when class changes
+            }}
             className="px-3 py-2 border rounded-lg text-sm bg-white/80 border-slate-200"
           >
+            <option value="">Select Class</option>
             {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} {c.section ? `- ${c.section}` : ""}
+              <option key={c.class_id} value={c.class_id}>
+                {c.class_name} {c.section ? `- ${c.section}` : ""}
               </option>
             ))}
           </select>
         </div>
 
+        {/* SUBJECT FILTER */}
+        <div className="flex flex-col">
+          <label className="text-xs text-slate-600 mb-1">Subject</label>
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value ? Number(e.target.value) : "")}
+            className="px-3 py-2 border rounded-lg text-sm bg-white/80 border-slate-200"
+            disabled={!classId}
+          >
+            <option value="">Select Subject</option>
+            {filteredSubjects.map((a) => (
+              <option key={a.subject_id} value={a.subject_id}>
+                {a.subject_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* DATE */}
         <div className="flex flex-col">
           <label className="text-xs text-slate-600 mb-1">Date</label>
           <input
@@ -253,6 +241,7 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
             className="px-3 py-2 border rounded-lg text-sm bg-white/80 border-slate-200"
           />
         </div>
+
       </div>
 
 
@@ -278,6 +267,22 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
       {/* Actions */}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
+          onClick={() => {
+            if (!classId) {
+              showToast("Select class first", "error");
+              return;
+            }
+            if (!selectedSubject) {
+              showToast("Select subject first", "error");
+              return;
+            }
+            setFaceMode(true);
+          }}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm"
+        >
+          Start Face Attendance
+        </button>
+        <button
           onClick={openConfirm}
           disabled={loading}
           className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm disabled:opacity-60"
@@ -300,40 +305,20 @@ export default function TakeAttendanceSection({ onDone, glassCard, showToast }) 
         onConfirm={handleConfirm}
       />
 
-
-      {/* Inline confirm bar
-      {confirmOpen && (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <div className="text-xs sm:text-sm text-amber-800 flex-1">
-            Are you sure you want to save attendance for this class and date?
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => setConfirmOpen(false)}
-              className="px-3 py-1.5 rounded-lg border border-amber-200 text-xs sm:text-sm text-amber-800 bg-white hover:bg-amber-50"
-            >
-              No
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={loading}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs sm:text-sm disabled:opacity-60"
-            >
-              {loading ? "Saving..." : "Yes, Save"}
-            </button>
-          </div>
+      {faceMode && (
+        <div className="mt-4">
+          <FaceAttendanceSection
+            classId={classId}
+            subjectId={selectedSubject}
+            date={date}
+            onClose={() => setFaceMode(false)}
+            showToast={showToast}
+          />
         </div>
-      )} */}
-
-
-      {/* <ConfirmModal
-        open={confirmOpen}
-        title="Confirm Submit"
-        message="Are you sure you want to save this attendance?"
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={handleConfirm}
-      /> */}
+      )}
     </div>
+
+
   );
 }
 
@@ -368,3 +353,5 @@ function SimpleConfirm({ open, title, message, onConfirm, onCancel }) {
     </div>
   );
 }
+
+

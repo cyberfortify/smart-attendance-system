@@ -52,6 +52,9 @@ export default function ManageStudents({ onStudentChanged }) {
   const [newThisMonthCount, setNewThisMonthCount] = useState(0);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [importing, setImporting] = useState(false);
+  const [faceStudent, setFaceStudent] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
 
   const glassCard = "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
@@ -247,6 +250,59 @@ export default function ManageStudents({ onStudentChanged }) {
     withClass: withClassCount,
     newThisMonth: newThisMonthCount,
   };
+
+  function openFaceModal(student) {
+    setFaceStudent(student);
+
+    // Start camera after small delay (modal render hone ke baad)
+    setTimeout(() => {
+      startCamera();
+    }, 300);
+  }
+
+  function stopCamera() {
+    const stream = videoRef.current?.srcObject;
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+  }
+
+  async function startCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoRef.current.srcObject = stream;
+  }
+
+  async function captureFace() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const blob = await new Promise(resolve =>
+      canvas.toBlob(resolve, "image/jpeg")
+    );
+
+    const formData = new FormData();
+    formData.append("image", blob);
+
+    try {
+      await api.post(
+        `/admin/students/${faceStudent.id}/register-face`,
+        formData
+      );
+
+      setToast({ message: "Face Registered!", variant: "success" });
+    } catch (err) {
+      setToast({ message: "Face registration failed", variant: "error" });
+    }
+
+    stopCamera();
+    setFaceStudent(null);
+  }
 
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden relative">
@@ -665,16 +721,21 @@ export default function ManageStudents({ onStudentChanged }) {
                         <span className="text-slate-400 text-sm">Not assigned</span>
                       )}
                     </td>
-                    {/* <td className="hidden md:table-cell p-4">
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800">
-                        <CheckCircle className="w-4 h-4" />
-                        Active
-                      </span>
-                    </td> */}
 
                     {/* Actions – desktop only */}
                     <td className="hidden md:table-cell p-4">
                       <div className="flex items-center gap-2">
+
+                        {/* Face Register Button */}
+                        <button
+                          onClick={() => openFaceModal(s)}
+                          className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Register Face"
+                        >
+                          📸
+                        </button>
+
+                        {/* Edit */}
                         <button
                           onClick={() => openEdit(s)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -682,6 +743,8 @@ export default function ManageStudents({ onStudentChanged }) {
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+
+                        {/* Delete */}
                         <button
                           onClick={() => setDeleteConfirm(s.id)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -689,6 +752,7 @@ export default function ManageStudents({ onStudentChanged }) {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+
                       </div>
                     </td>
                   </tr>
@@ -938,6 +1002,46 @@ export default function ManageStudents({ onStudentChanged }) {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Face Registration Modal */}
+      {faceStudent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+
+            <h2 className="text-lg font-bold mb-4">
+              Register Face - {faceStudent.name}
+            </h2>
+
+            <video
+              ref={videoRef}
+              autoPlay
+              className="w-full h-60 rounded-lg bg-black"
+            />
+
+            <canvas ref={canvasRef} className="hidden" />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => {
+                  stopCamera();
+                  setFaceStudent(null);
+                }}
+                className="px-4 py-2 bg-gray-200 rounded-lg"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={captureFace}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg"
+              >
+                Capture
+              </button>
+            </div>
+
           </div>
         </div>
       )}
