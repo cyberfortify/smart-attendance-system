@@ -293,11 +293,25 @@ def list_students():
             }
         )
 
+    total = Student.query.count()
+    with_class = Student.query.filter(Student.class_id.isnot(None)).count()
+    start_month = datetime.utcnow().replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
+    new_this_month = Student.query.filter(Student.created_at >= start_month).count()
+
     return {
         "data": data,
         "total": pagination.total,
         "page": pagination.page,
         "per_page": pagination.per_page,
+        "active_count": total,
+        "with_class_count": with_class,
+        "new_this_month_count": new_this_month,
     }, 200
 
 
@@ -309,7 +323,7 @@ def import_students_csv():
 
     f = request.files["file"]
 
-    stream = io.TextIOWrapper(f.stream, encoding="utf-8-sig")
+    stream = io.StringIO(f.read().decode("utf-8-sig"))
     reader = csv.DictReader(stream)
 
     required = {"name", "email", "roll_no", "class_id"}
@@ -651,6 +665,41 @@ def import_teachers_csv():
             "errors": errors,
         }
     ), 200
+
+
+
+@admin_bp.route("/export/teachers", methods=["GET"])
+@role_required("ADMIN")
+def export_teachers_csv():
+
+    teachers = User.query.filter_by(role="TEACHER").all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # CSV Header
+    writer.writerow(["teacher_id", "name", "email", "employee_id"])
+
+    for u in teachers:
+        teacher_profile = Teacher.query.filter_by(user_id=u.id).first()
+
+        writer.writerow([
+            teacher_profile.id if teacher_profile else "",
+            u.name,
+            u.email,
+            teacher_profile.employee_id if teacher_profile else "",
+        ])
+
+    output.seek(0)
+
+    return (
+        output.getvalue(),
+        200,
+        {
+            "Content-Type": "text/csv",
+            "Content-Disposition": "attachment; filename=teachers_export.csv",
+        },
+    )
 
 
 @admin_bp.route("/teacher-classes", methods=["POST"])

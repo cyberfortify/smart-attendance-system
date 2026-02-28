@@ -20,6 +20,12 @@ class Student(db.Model):
         db.Integer,
         db.ForeignKey("classes.id", ondelete="SET NULL")
     )
+
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
     
 
     # FACE REGISTRATION FIELDS

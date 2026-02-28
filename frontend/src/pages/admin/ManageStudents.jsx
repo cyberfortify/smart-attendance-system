@@ -163,7 +163,13 @@ export default function ManageStudents({ onStudentChanged }) {
 
   async function exportCSV() {
     try {
-      const res = await api.get("/admin/export/students", { params: { q: search }, responseType: "blob" });
+      const res = await api.get("/admin/export/students", {
+        params: {
+          q: search,
+          class_id: selectedClassId || undefined
+        },
+        responseType: "blob"
+      });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -268,8 +274,13 @@ export default function ManageStudents({ onStudentChanged }) {
   }
 
   async function startCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    videoRef.current.srcObject = stream;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoRef.current.srcObject = stream;
+    } catch (err) {
+      setToast({ message: "Camera access denied", variant: "error" });
+      setFaceStudent(null);
+    }
   }
 
   async function captureFace() {

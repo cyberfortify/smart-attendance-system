@@ -126,17 +126,25 @@ export default function ManageTeachers() {
   // Export teachers CSV
   async function exportCSV() {
     try {
-      const res = await api.get("/admin/export/teachers", { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const res = await api.get("/admin/export/teachers", {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `teachers_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.download = `teachers_export_${new Date().toISOString().split("T")[0]}.csv`;
+
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setToast({ message: "Export started successfully", variant: "success" });
+
+      setToast({ message: "Teachers exported successfully", variant: "success" });
+
     } catch (err) {
-      console.error("Export failed:", err);
+      console.error(err);
       setToast({ message: "Export failed", variant: "error" });
     }
   }
@@ -658,17 +666,20 @@ export default function ManageTeachers() {
             <h3 className="font-semibold text-base text-slate-900 mb-3">Quick Actions</h3>
             <div className="space-y-2.5">
               {/* onClick={() => fileInputRef.current?.click()} */}
-              <button className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+              <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-blue-50 rounded-lg border border-blue-100"><Upload className="w-4 h-4 text-blue-600" /></div>
                 <div>
-                  <div onClick={() => fileInputRef.current?.click()} className="font-medium text-slate-900 text-sm">Bulk Import</div>
+                  <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
                   <div className="text-xs text-slate-500">Upload CSV file</div>
                 </div>
               </button>
 
 
               {/* onClick={exportCSV} */}
-              <button className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
+              <button
+                onClick={exportCSV}
+                className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group"
+              >
                 <div className="p-2 bg-green-50 rounded-lg border border-green-100"><Download className="w-4 h-4 text-green-600" /></div>
                 <div>
                   <div className="font-medium text-slate-900 text-sm">Export Teachers</div>
