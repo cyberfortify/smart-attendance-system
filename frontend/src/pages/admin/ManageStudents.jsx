@@ -304,6 +304,16 @@ export default function ManageStudents({ onStudentChanged }) {
     setFaceStudent(null);
   }
 
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden relative">
       {/* Header */}

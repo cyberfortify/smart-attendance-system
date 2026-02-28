@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import Toast from "../../components/Toast";
 import {
   PlusCircle,
   Trash2,
@@ -26,6 +27,7 @@ export default function ManageClasses() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const currentYear = new Date().getFullYear();
   const nextYear = currentYear + 1;
+  const [toast, setToast] = useState(null);
 
 
   const stats = {
@@ -51,27 +53,65 @@ export default function ManageClasses() {
 
   async function handleCreate() {
     if (!form.name || !form.section || !form.year) {
-      // Optional: Add validation feedback here
+      setToast({
+        message: "Please fill all required fields",
+        variant: "warning"
+      });
       return;
     }
 
     setIsSubmitting(true);
+
     try {
       await api.post("/admin/classes", form);
+
+      setToast({
+        message: "Class created successfully",
+        variant: "success"
+      });
+
       setForm({ name: "", section: "", year: "" });
       await load();
+
     } catch (error) {
       console.error("Failed to create class:", error);
+
+      setToast({
+        message: error?.response?.data?.error || "Failed to create class",
+        variant: "error"
+      });
+
     } finally {
       setIsSubmitting(false);
     }
   }
 
   async function handleDelete(id) {
-    await api.delete(`/admin/classes/${id}`);
-    setShowDeleteConfirm(null);
-    load();
+    try {
+      await api.delete(`/admin/classes/${id}`);
+      setToast({
+        message: "Class deleted successfully",
+        variant: "success"
+      });
+      setShowDeleteConfirm(null);
+      load();
+    } catch (error) {
+      setToast({
+        message: "Failed to delete class",
+        variant: "error"
+      });
+    }
   }
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Filter classes based on search and filter
   const filteredClasses = classes.filter((cls) => {
@@ -178,7 +218,7 @@ export default function ManageClasses() {
 
       </div>
 
-  
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Class List */}
         <div className="lg:col-span-2 order-2 lg:order-1">
@@ -370,8 +410,8 @@ export default function ManageClasses() {
                   onClick={handleCreate}
                   disabled={isSubmitting || !form.name || !form.section || !form.year}
                   className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium transition-all ${isSubmitting || !form.name || !form.section || !form.year
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow hover:shadow-md"
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow hover:shadow-md"
                     }`}
                 >
                   {isSubmitting ? (
@@ -456,6 +496,17 @@ export default function ManageClasses() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <Toast
+            message={toast.message}
+            variant={toast.variant}
+            onClose={() => setToast(null)}
+          />
         </div>
       )}
     </div>

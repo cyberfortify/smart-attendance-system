@@ -49,14 +49,15 @@ export default function AdminDashboard() {
       const res = await api.get("/admin/notifications");
       const items = res.data.data || [];
       setNotifications(items);
-      setUnreadCount(items.filter((n) => !n.read).length);
+      const unread = items.filter((n) => n.read === false).length;
+      setUnreadCount(unread);
     } catch (err) {
       console.error("Notifications load error:", err);
     }
   }
 
 
-``
+  ``
   async function refreshAllDashboardData() {
     try {
       setLoadingStats(true);
@@ -81,13 +82,7 @@ export default function AdminDashboard() {
 
 
   useEffect(() => {
-    loadNotifications(); // initial load
-
-    const interval = setInterval(() => {
-      loadNotifications();
-    }, 500); // every 10 seconds
-
-    return () => clearInterval(interval);
+    loadNotifications();
   }, []);
 
 
@@ -412,17 +407,26 @@ export default function AdminDashboard() {
   }
 
   async function handleNotificationClick() {
-    setNotifOpen((v) => !v);
+    const willOpen = !notifOpen;
+    setNotifOpen(willOpen);
 
-    if (unreadCount > 0) {
+    if (willOpen && unreadCount > 0) {
       try {
         await api.patch("/admin/notifications/read");
-        await loadNotifications(); //  instant refresh
+
+        // Immediately remove red dot
+        setUnreadCount(0);
+
+        // Refresh notifications
+        await loadNotifications();
       } catch (err) {
         console.error("Failed to mark notifications as read", err);
       }
     }
   }
+
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f5e9ff] via-[#92aabf] to-[#92aabf] text-slate-900">
       {/* subtle top-left vignette to match image */}
@@ -566,7 +570,10 @@ export default function AdminDashboard() {
                   >
                     <Bell className="w-5 h-5 text-slate-700" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-1 ring-white" />
+                      <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
                     )}
                   </button>
 

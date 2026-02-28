@@ -267,6 +267,16 @@ export default function ManageTeachers() {
     setFaceTeacher(null);
   }
 
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden relative">
       {/* Header + stats */}
@@ -651,7 +661,7 @@ export default function ManageTeachers() {
               <button className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-slate-200 rounded-xl text-left transition-colors group">
                 <div className="p-2 bg-blue-50 rounded-lg border border-blue-100"><Upload className="w-4 h-4 text-blue-600" /></div>
                 <div>
-                  <div className="font-medium text-slate-900 text-sm">Bulk Import</div>
+                  <div onClick={() => fileInputRef.current?.click()} className="font-medium text-slate-900 text-sm">Bulk Import</div>
                   <div className="text-xs text-slate-500">Upload CSV file</div>
                 </div>
               </button>
@@ -803,7 +813,7 @@ export default function ManageTeachers() {
         </div>
       )}
 
-      
+
       {/* Toast */}
       {toast && <div className="fixed bottom-4 right-4 z-50 animate-slide-in"><Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} /></div>}
     </div>

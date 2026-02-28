@@ -14,6 +14,8 @@ export default function ManageSubjects() {
   const [form, setForm] = useState({ name: "", class_id: "" });
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedClass, setSelectedClass] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const glassCard =
     "rounded-2xl bg-white/20 backdrop-blur-xl border border-white/80 shadow-[0_18px_45px_rgba(15,23,42,0.12)]";
@@ -70,6 +72,27 @@ export default function ManageSubjects() {
       setToast({ message: "Delete failed", variant: "error" });
     }
   }
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const subjectsByClass = classes
+    .filter(cls => selectedClass === "all" || cls.id.toString() === selectedClass)
+    .map(cls => ({
+      ...cls,
+      subjects: subjects.filter(s =>
+        s.class_id === cls.id &&
+        s.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }))
+    .filter(cls => cls.subjects.length > 0);
 
   return (
     <div className="space-y-6 w-full">
@@ -134,38 +157,74 @@ export default function ManageSubjects() {
           All Subjects
         </h2>
 
-        {subjects.length === 0 ? (
+        <div className="flex flex-col md:flex-row gap-3 mb-4">
+
+          {/* Class Filter */}
+          <select
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm"
+          >
+            <option value="all">All Classes</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} {c.section}
+              </option>
+            ))}
+          </select>
+
+          {/* Search Subject */}
+          <input
+            type="text"
+            placeholder="Search subject..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm w-full md:w-60"
+          />
+
+        </div>
+
+        {subjectsByClass.length === 0 ? (
           <div className="text-sm text-slate-500">
             No subjects created yet.
           </div>
         ) : (
-          <div className="space-y-3">
-            {subjects.map((s) => {
-              const klass = classes.find((c) => c.id === s.class_id);
+          <div className="space-y-6">
+            {subjectsByClass.map((cls) => (
+              <div key={cls.id} className="bg-white/60 rounded-xl p-4 border border-slate-200">
 
-              return (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between p-3 bg-white/70 rounded-xl border border-slate-200"
-                >
-                  <div>
-                    <div className="font-medium text-slate-900">
-                      {s.name}
-                    </div>
-                    <div className="text-xs text-slate-600">
-                      Class: {klass ? `${klass.name} ${klass.section}` : "Unknown"}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => deleteSubject(s.id)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                {/* Class Header */}
+                <div className="flex items-center justify-between">
+                  <span>
+                    {cls.name} {cls.section} ({cls.year})
+                  </span>
+                  <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">
+                    {cls.subjects.length} Subjects
+                  </span>
                 </div>
-              );
-            })}
+
+                {/* Subjects Under Class */}
+                <div className="space-y-2">
+                  {cls.subjects.map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100"
+                    >
+                      <div className="text-sm font-medium text-slate-900">
+                        {s.name}
+                      </div>
+
+                      <button
+                        onClick={() => deleteSubject(s.id)}
+                        className="p-2 rounded-lg hover:bg-red-50 text-red-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

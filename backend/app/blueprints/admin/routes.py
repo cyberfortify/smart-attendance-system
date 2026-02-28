@@ -82,10 +82,10 @@ def mark_notifications_read():
     try:
         user_id = get_jwt_identity()
 
-        Notification.query.filter_by(
-            user_id=user_id,
-            is_read=False
-        ).update({"is_read": True})
+        Notification.query.filter(
+            Notification.user_id == user_id,
+            Notification.is_read == False
+        ).update({"is_read": True}, synchronize_session=False)
 
         db.session.commit()
 
@@ -567,6 +567,90 @@ def create_teacher():
         ),
         201,
     )
+
+
+@admin_bp.route("/teachers/import", methods=["POST"])
+@role_required("ADMIN")
+def import_teachers_csv():
+
+    if "file" not in request.files:
+        raise APIError("CSV file missing", status_code=400)
+
+    f = request.files["file"]
+    stream = io.StringIO(f.read().decode("utf-8-sig"))
+    reader = csv.DictReader(stream)
+
+    required = {"name", "email", "employee_id"}
+    headers = set(h.lower().strip() for h in reader.fieldnames or [])
+
+    if not required.issubset(headers):
+        raise APIError(
+            "CSV must contain columns: name, email, employee_id",
+            status_code=400,
+        )
+
+    created = 0
+    updated = 0
+    skipped = 0
+    errors = []
+
+    try:
+        for idx, row in enumerate(reader, start=2):
+            try:
+                name = row["name"].strip()
+                email = row["email"].strip().lower()
+                employee_id = row["employee_id"].strip()
+                password = row.get("password") or generate_random_password()
+
+                if not name or not email:
+                    raise ValueError("Missing name/email")
+
+                user = User.query.filter_by(email=email).first()
+
+                if not user:
+                    user = create_user(
+                        name=name,
+                        email=email,
+                        password=password,
+                        role="TEACHER"
+                    )
+                    db.session.flush()
+                    created += 1
+                else:
+                    updated += 1
+
+                teacher = Teacher.query.filter_by(user_id=user.id).first()
+
+                if not teacher:
+                    teacher = Teacher(
+                        user_id=user.id,
+                        employee_id=employee_id
+                    )
+                    db.session.add(teacher)
+                else:
+                    teacher.employee_id = employee_id
+
+            except Exception as row_err:
+                skipped += 1
+                errors.append({"row": idx, "error": str(row_err)})
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        print("TEACHER IMPORT FAILED:", e)
+        raise APIError("Bulk teacher import failed", status_code=500)
+
+    return jsonify(
+        {
+            "success": True,
+            "message": "Teacher import completed",
+            "created_count": created,
+            "updated_count": updated,
+            "skipped_count": skipped,
+            "errors": errors,
+        }
+    ), 200
 
 
 @admin_bp.route("/teacher-classes", methods=["POST"])
