@@ -7,10 +7,9 @@ import {
 } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("teacher1@gmail.com");
-  const [password, setPassword] = useState("teacher123");
+  const [email, setEmail] = useState("admin@example.com");
+  const [password, setPassword] = useState("admin123");
   const [showPassword, setShowPassword] = useState(false);
-  // const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -20,13 +19,6 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setIsLoading(true);
-
-    // if (rememberMe) {
-    //   localStorage.setItem("remember_email", email);
-    // } else {
-    //   localStorage.removeItem("remember_email");
-    // }
-
 
     try {
       const res = await api.post("/auth/login", { email, password });
@@ -42,7 +34,7 @@ export default function Login() {
       if (user.role === "ADMIN") navigate("/admin");
       else if (user.role === "TEACHER") navigate("/teacher");
       else navigate("/student");
-      
+
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -53,14 +45,6 @@ export default function Login() {
       setIsLoading(false);
     }
   }
-
-  // useEffect(() => {
-  //   const savedEmail = localStorage.getItem("remember_email");
-  //   if (savedEmail) {
-  //     setEmail(savedEmail);
-  //     setRememberMe(true);
-  //   }
-  // }, []);
 
 
   function handleClose() {
@@ -174,23 +158,6 @@ export default function Login() {
                       )}
                     </button>
                   </div>
-                </div>
-
-                {/* Options - Compact */}
-                <div className="flex items-center justify-between pt-1">
-                  {/* <label className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600"
-                    />
-
-                    <span>Remember</span>
-                  </label> */}
-                  {/* <button type="button" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                    Forgot?
-                  </button> */}
                 </div>
 
                 {/* Submit Button - Compact */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getUser, clearAuth } from "../../utils/auth";
@@ -23,6 +23,7 @@ import api, {
 import ChartCard from "../../components/ChartCard";
 import TakeAttendanceSection from "./TakeAttendanceSection";
 import TeacherAcademicAssignments from "./TeacherAcademicAssignments";
+import TeacherAssignmentCalendar from "./TeacherAssignmentCalendar";
 import Toast from "../../components/Toast";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -30,6 +31,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 export default function TeacherDashboard() {
   const user = getUser();
   const navigate = useNavigate();
+  const notifRef = useRef(null);
+
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -77,12 +80,10 @@ export default function TeacherDashboard() {
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
     { key: "attendance", label: "Take Attendance", icon: <ClipboardCheck className="w-4 h-4" /> },
-    // { key: "students", label: "Students", icon: <Users className="w-4 h-4" /> },
-    // { key: "assignments", label: "Assignments", icon: <BookOpen className="w-4 h-4" /> },
     { key: "defaulters", label: "Defaulters", icon: <AlertTriangle className="w-4 h-4" /> },
-    { key: "academicAssignments", label: "Academic Assignments", icon: <BookOpen /> },
+    { key: "academicAssignments", label: "Academic Assignments", icon: <BookOpen className="w-4 h-4" /> },
+    { key: "assignmentCalendar", label: "Assignment Calendar", icon: <CalendarDays className="w-4 h-4" /> },
     { key: "myAttendance", label: "My Attendance", icon: <CalendarDays className="w-4 h-4" /> }
-    // { key: "schedule", label: "Schedule", icon: <CalendarDays className="w-4 h-4" /> },
   ];
 
   const [stats, setStats] = useState({
@@ -126,6 +127,25 @@ export default function TeacherDashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        notifRef.current &&
+        !notifRef.current.contains(event.target)
+      ) {
+        setNotifOpen(false);
+      }
+    }
+
+    if (notifOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [notifOpen]);
 
   async function loadSelfAttendance() {
     try {
@@ -533,7 +553,9 @@ export default function TeacherDashboard() {
 
                   {notifOpen &&
                     createPortal(
-                      <div className="fixed top-20 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
+                      <div 
+                      ref={notifRef}
+                      className="fixed top-20 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
                         <div className="px-4 py-3 border-b flex justify-between items-center">
                           <span className="text-sm font-semibold">Notifications</span>
                           <span className="text-xs text-slate-500">{unreadCount} new</span>
@@ -1209,6 +1231,10 @@ export default function TeacherDashboard() {
 
             {activeTab === "academicAssignments" && (
               <TeacherAcademicAssignments glassCard={glassCard} />
+            )}
+
+            {activeTab === "assignmentCalendar" && (
+              <TeacherAssignmentCalendar glassCard={glassCard} />
             )}
           </main>
         </div>

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from flask import Blueprint, jsonify, request
 from ...services.attendance_service import get_student_attendance
 from ...services.attendance_service import get_student_daily_attendance
@@ -14,6 +14,11 @@ from app.extensions import db
 from app.models.attendance_record import AttendanceRecord
 from app.models.attendance_session import AttendanceSession
 from app.models.student import Student
+
+from ...models.academic_assignment import AcademicAssignment
+from ...models.assignment_submission import AssignmentSubmission
+import os
+import uuid
 
 student_bp = Blueprint("student", __name__)
 
@@ -37,7 +42,7 @@ def get_student_notifications():
                 "title": n.title,
                 "message": n.message,
                 "time": n.created_at.strftime("%d %b %Y %H:%M"),
-                "read": n.is_read,
+                "is_read": n.is_read,
                 "type": n.type,
             }
             for n in notifications
@@ -49,18 +54,27 @@ def get_student_notifications():
         print("Student notification error:", e)
         return jsonify({"success": False, "error": "Failed to load notifications"}), 500
 
+
 @student_bp.route("/notifications/read", methods=["PATCH"])
 @role_required("STUDENT")
 def mark_student_notifications_read():
     try:
         user_id = int(get_jwt_identity())
+        print("JWT USER ID:", user_id)
 
-        Notification.query.filter_by(
+        notifications = Notification.query.filter_by(
             user_id=user_id,
             is_read=False
-        ).update({"is_read": True})
+        ).all()
+
+        print("FOUND UNREAD:", len(notifications))
+
+        for n in notifications:
+            n.is_read = True
 
         db.session.commit()
+
+        print("UPDATED SUCCESSFULLY")
 
         return jsonify({"success": True})
 
@@ -68,6 +82,8 @@ def mark_student_notifications_read():
         db.session.rollback()
         print("Student mark read error:", e)
         return jsonify({"success": False, "error": "Failed to update"}), 500
+    
+    
 
 @student_bp.route("/me/attendance", methods=["GET"])
 @role_required("STUDENT")
@@ -202,4 +218,84 @@ def my_calendar():
         return jsonify({"success": False, "error": "Failed to load calendar"}), 500
     
 
+@student_bp.route("/me/assignments", methods=["GET"])
+@role_required("STUDENT")
+def student_assignments():
 
+    user_id = int(get_jwt_identity())
+    student = Student.query.filter_by(user_id=user_id).first()
+
+    if not student:
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    assignments = AcademicAssignment.query.filter_by(
+        class_id=student.class_id
+    ).order_by(AcademicAssignment.due_date.asc()).all()
+
+    data = []
+
+    for a in assignments:
+        submission = AssignmentSubmission.query.filter_by(
+            assignment_id=a.id,
+            student_id=student.id
+        ).first()
+
+        data.append({
+            "id": a.id,
+            "title": a.title,
+            "description": a.description,
+            "due_date": a.due_date.strftime("%Y-%m-%d"),
+            "subject_name": a.subject.name if a.subject else None,
+            "file_path": a.file_path,
+            "submitted": bool(submission),
+            "submitted_at": submission.submitted_at.strftime("%Y-%m-%d")
+            if submission else None
+        })
+
+    return jsonify({"success": True, "data": data})
+
+
+@student_bp.route("/me/assignments/<int:assignment_id>/submit", methods=["POST"])
+@role_required("STUDENT")
+def submit_assignment(assignment_id):
+
+    user_id = int(get_jwt_identity())
+    student = Student.query.filter_by(user_id=user_id).first()
+
+    if not student:
+        return jsonify({"success": False}), 404
+
+    assignment = AcademicAssignment.query.get_or_404(assignment_id)
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "File required"}), 400
+
+    file = request.files["file"]
+
+    upload_folder = "uploads/submissions"
+    os.makedirs(upload_folder, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}_{file.filename}"
+    file_path = os.path.join(upload_folder, filename)
+    file.save(file_path)
+
+    existing = AssignmentSubmission.query.filter_by(
+        assignment_id=assignment_id,
+        student_id=student.id
+    ).first()
+
+    if existing:
+        existing.file_path = file_path
+        existing.submitted_at = datetime.utcnow()
+    else:
+        new_sub = AssignmentSubmission(
+            assignment_id=assignment_id,
+            student_id=student.id,
+            file_path=file_path,
+            submitted_at=datetime.utcnow()
+        )
+        db.session.add(new_sub)
+
+    db.session.commit()
+
+    return jsonify({"success": True})

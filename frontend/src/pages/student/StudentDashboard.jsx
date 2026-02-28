@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getUser, clearAuth } from "../../utils/auth";
@@ -16,10 +16,12 @@ import {
 } from "lucide-react";
 import ChartCard from "../../components/ChartCard";
 import Toast from "../../components/Toast";
+import StudentCalendar from "../../pages/student/StudentCalendar";
 
 export default function StudentDashboard() {
   const user = getUser();
   const navigate = useNavigate();
+  const notificationRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -35,6 +37,7 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [calendarData, setCalendarData] = useState([]);
+  const [assignments, setAssignments] = useState([]);
 
   // Range + metric for analytics
   const [range, setRange] = useState("month"); // "day" | "week" | "month" | "year"
@@ -46,8 +49,8 @@ export default function StudentDashboard() {
   const navItems = [
     { key: "dashboard", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
     { key: "attendance", label: "My Attendance", icon: <ClipboardList className="w-4 h-4" /> },
-    { key: "trends", label: "Trends", icon: <TrendingUp className="w-4 h-4" /> }
-    // { key: "schedule", label: "Schedule", icon: <Calendar className="w-4 h-4" /> },
+    { key: "trends", label: "Trends", icon: <TrendingUp className="w-4 h-4" /> },
+    { key: "assignments", label: "Assignments", icon: <ClipboardList className="w-4 h-4" /> }
   ];
 
   // Load analytics (summary + series + yearly)
@@ -115,6 +118,15 @@ export default function StudentDashboard() {
     loadStudentData();
   }, [range]);
 
+  async function loadAssignments() {
+    const res = await api.get("/student/me/assignments");
+    setAssignments(res.data.data || []);
+  }
+
+  useEffect(() => {
+    loadAssignments();
+  }, []);
+
 
   async function loadNotifications() {
     try {
@@ -128,6 +140,26 @@ export default function StudentDashboard() {
   useEffect(() => {
     loadNotifications();
   }, []);
+
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target)
+      ) {
+        setShowNotifications(false);
+      }
+    }
+
+    if (showNotifications) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showNotifications]);
 
   function logout() {
     clearAuth();
@@ -232,7 +264,7 @@ export default function StudentDashboard() {
         <div className="absolute right-0 top-0 w-72 h-72 bg-blue-200/20 rounded-full blur-3xl" />
       </div>
 
-      <div className="flex h-full">
+      <div className="flex h-screen overflow-hidden">
         {/* Mobile overlay */}
         {isSidebarOpen && (
           <div
@@ -244,11 +276,11 @@ export default function StudentDashboard() {
         {/* SIDEBAR */}
         <aside
           className={`z-30 w-64
-            bg-white/90 backdrop-blur-xl border-r border-white/60 shadow-2xl
-            transform transition-transform duration-300
-            fixed inset-y-0 left-0
-            ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-            lg:static lg:inset-auto`}
+    bg-white/95 backdrop-blur-xl border-r border-white/60 shadow-2xl
+    transform transition-transform duration-300
+    fixed inset-y-0 left-0
+    ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+    lg:static lg:translate-x-0`}
         >
           <div className="h-full flex flex-col">
             {/* Header */}
@@ -347,7 +379,7 @@ export default function StudentDashboard() {
 
               {/* Range selector (global) */}
               <div className="flex items-center gap-3">
-                <div className="hidden sm:inline-flex rounded-xl bg-white/50 border border-white/70 p-1">
+                {/* <div className="hidden sm:inline-flex rounded-xl bg-white/50 border border-white/70 p-1">
                   {["day", "week", "month", "year"].map((r) => (
                     <button
                       key={r}
@@ -366,7 +398,7 @@ export default function StudentDashboard() {
                             : "Year"}
                     </button>
                   ))}
-                </div>
+                </div> */}
                 {/* Notifications */}
                 <div className="relative">
                   <button
@@ -375,16 +407,18 @@ export default function StudentDashboard() {
                   >
                     <Bell className="w-5 h-5 text-slate-600" />
 
-                    {notifications.filter(n => !n.read).length > 0 && (
+                    {notifications.filter(n => !n.is_read).length > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
-                        {notifications.filter(n => !n.read).length}
+                        {notifications.filter(n => !n.is_read).length}
                       </span>
                     )}
                   </button>
 
                   {showNotifications &&
                     createPortal(
-                      <div className="fixed top-24 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
+                      <div 
+                      ref={notificationRef}
+                      className="fixed top-24 right-8 w-80 bg-white shadow-2xl rounded-xl border z-[999999] max-h-96 overflow-y-auto">
                         <div className="p-3 border-b font-semibold">Notifications</div>
 
                         {notifications.length === 0 ? (
@@ -743,24 +777,93 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* SCHEDULE TAB (placeholder)
-            {activeTab === "schedule" && (
-              <div className={`${glassCard} p-4 sm:p-6 min-h-[320px] sm:min-h-[400px]`}>
-                <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">
-                  Upcoming Schedule
-                </h3>
-                <div className="text-center py-12 sm:py-20">
-                  <Calendar className="w-16 h-16 sm:w-24 sm:h-24 text-slate-300 mx-auto mb-4" />
-                  <p className="text-base sm:text-lg text-slate-500 mb-2">
-                    Schedule integration coming soon
-                  </p>
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    Class timetable and upcoming sessions
-                  </p>
-                </div>
-              </div>
+            {/* Assignment Tab */}
+            {activeTab === "assignments" && (
+              <div className="space-y-6">
+                <div className={`${glassCard} p-6`}>
+                  <h3 className="text-lg font-semibold mb-5">
+                    My Assignments
+                  </h3>
 
-            )} */}
+                  {assignments.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No assignments yet.
+                    </p>
+                  ) : (
+                    assignments.map(a => {
+                      const isOverdue = new Date(a.due_date) < new Date();
+
+                      return (
+                        <div key={a.id}
+                          className="p-4 border rounded-xl mb-3 bg-white/70">
+
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="font-semibold text-slate-900">
+                                {a.title}
+                              </div>
+                              <div className="text-xs text-slate-500 mt-1">
+                                📖 {a.subject_name}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                🗓 Due: {a.due_date}
+                              </div>
+                            </div>
+
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${a.submitted
+                              ? "bg-emerald-100 text-emerald-600"
+                              : isOverdue
+                                ? "bg-rose-100 text-rose-600"
+                                : "bg-amber-100 text-amber-600"
+                              }`}>
+                              {a.submitted
+                                ? "Submitted"
+                                : isOverdue
+                                  ? "Overdue"
+                                  : "Pending"}
+                            </span>
+                          </div>
+
+                          {!a.submitted && (
+                            <form
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                const file = e.target.file.files[0];
+                                if (!file) return;
+
+                                const formData = new FormData();
+                                formData.append("file", file);
+
+                                await api.post(
+                                  `/student/me/assignments/${a.id}/submit`,
+                                  formData
+                                );
+
+                                loadAssignments();
+                              }}
+                              className="mt-3 flex gap-3 items-center"
+                            >
+                              <input
+                                type="file"
+                                name="file"
+                                className="text-sm"
+                              />
+                              <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">
+                                Submit
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <StudentCalendar glassCard={glassCard} />
+              </div>
+              
+            )}
+
+            
           </main>
         </div>
       </div>

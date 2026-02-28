@@ -10,3 +10,4 @@ from .teacher_subject_assignments import TeacherSubjectAssignment
 from .notification import Notification
 from .teacher_attendance import TeacherAttendance
 from .academic_assignment import AcademicAssignment
+from .assignment_submission import AssignmentSubmission

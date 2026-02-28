@@ -122,7 +122,6 @@ def create_class():
 
     create_notification(
         user_id=admin_user_id,
-        role="ADMIN",
         title="Class Created",
         message=f"Class {klass.name} created successfully.",
         type="success"
@@ -224,7 +223,6 @@ def create_student():
 
         create_notification(
             user_id=admin_user_id,
-            role="ADMIN",
             title="New Student Registered",
             message=f"{user.name} has been added.",
             type="success"
@@ -544,7 +542,6 @@ def create_teacher():
 
         create_notification(
             user_id=admin_user_id,
-            role="ADMIN",
             title="New Teacher Added",
             message=f"{user.name} joined as Teacher.",
             type="success"
@@ -607,7 +604,6 @@ def assign_teacher_to_class():
         db.session.commit()
         create_notification(
             user_id=teacher.user_id,
-            role="TEACHER",
             title="Class Assigned",
             message=f"You have been assigned to class {klass.name}.",
             type="info"
@@ -1065,8 +1061,7 @@ def create_subject():
     admin_user_id = get_jwt_identity()
 
     create_notification(
-        user_id=admin_user_id,
-        role="ADMIN",
+        user_id=admin_user_id,  
         title="Subject Created",
         message=f"{subject.name} added to class.",
         type="success"
@@ -1146,7 +1141,6 @@ def assign_teacher_subject():
 
     create_notification(
         user_id=teacher.user_id,
-        role="TEACHER",
         title="New Subject Assigned",
         message=f"You have been assigned to Class {klass.name} - {subject.name}",
         type="info"
